@@ -1,0 +1,216 @@
+import { useAuth } from '@/contexts/AuthContext';
+import { Navigate, Link, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3 } from 'lucide-react';
+import { insertFakeLeads } from '@/lib/fake-data';
+import { Lead, exportLeadsToCSV } from '@/lib/csv';
+import { useToast } from '@/hooks/use-toast';
+
+const steps = ['Buscar empresas', 'Encontrar site', 'Pesquisar decisor', 'Encontrar e-mail', 'Exportar'];
+
+const JobDetail = () => {
+  const { user, loading } = useAuth();
+  const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
+  const [job, setJob] = useState<any>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [search, setSearch] = useState('');
+  const [loadingData, setLoadingData] = useState(true);
+  const [inserting, setInserting] = useState(false);
+
+  const fetchData = async () => {
+    if (!id || !user) return;
+    const [jobRes, leadsRes] = await Promise.all([
+      supabase.from('jobs').select('*').eq('id', id).eq('user_id', user.id).single(),
+      supabase.from('leads').select('*').eq('job_id', id).order('created_at'),
+    ]);
+    setJob(jobRes.data);
+    setLeads((leadsRes.data as Lead[]) || []);
+    setLoadingData(false);
+  };
+
+  useEffect(() => { fetchData(); }, [user, id]);
+
+  if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
+  if (!user) return <Navigate to="/login" replace />;
+
+  const handleFakeData = async () => {
+    if (!id) return;
+    setInserting(true);
+    try {
+      await insertFakeLeads(id);
+      toast({ title: 'Dados de exemplo inseridos!' });
+      await fetchData();
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    } finally {
+      setInserting(false);
+    }
+  };
+
+  const handleExport = () => {
+    if (leads.length === 0) {
+      toast({ title: 'Sem leads para exportar', variant: 'destructive' });
+      return;
+    }
+    exportLeadsToCSV(leads, `leads-${job?.business_type || 'export'}-${new Date().toISOString().slice(0, 10)}.csv`);
+    toast({ title: 'CSV exportado!' });
+  };
+
+  const filtered = leads.filter(l =>
+    !search || Object.values(l).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const withSite = leads.filter(l => l.website).length;
+  const withEmail = leads.filter(l => l.corporate_email).length;
+  const withDecisionMaker = leads.filter(l => l.decision_maker_name).length;
+  const fillRate = leads.length ? Math.round(((withSite + withEmail + withDecisionMaker) / (leads.length * 3)) * 100) : 0;
+  const progressStep = job?.progress_step || 0;
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
+          <Button variant="ghost" size="icon" asChild>
+            <Link to="/jobs"><ArrowLeft className="h-4 w-4" /></Link>
+          </Button>
+          <div className="flex-1">
+            <span className="font-bold font-heading">{job?.business_type || 'Job'}</span>
+            <span className="text-sm text-muted-foreground ml-2">{job?.location_text}</span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleFakeData} disabled={inserting || leads.length > 0}>
+              <Database className="h-4 w-4 mr-1.5" />
+              {inserting ? 'Inserindo...' : 'Dados de Exemplo'}
+            </Button>
+            <Button size="sm" onClick={handleExport} disabled={leads.length === 0}>
+              <Download className="h-4 w-4 mr-1.5" />
+              Exportar CSV
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
+        {loadingData ? (
+          <p className="text-center text-muted-foreground py-12">Carregando...</p>
+        ) : !job ? (
+          <p className="text-center text-muted-foreground py-12">Job não encontrado.</p>
+        ) : (
+          <>
+            {/* Stepper */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex flex-wrap gap-2">
+                  {steps.map((step, i) => {
+                    const stepNum = i + 1;
+                    const isDone = progressStep >= stepNum;
+                    const isCurrent = progressStep === stepNum - 1 && job.status === 'running';
+                    return (
+                      <div key={step} className="flex items-center gap-2">
+                        <div className={`flex items-center gap-2 rounded-lg px-3 py-2 ${isDone ? 'bg-green-500/10' : isCurrent ? 'bg-primary/10' : 'bg-secondary'}`}>
+                          <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold ${isDone ? 'bg-green-500/20 text-green-400' : isCurrent ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                            {isDone ? '✓' : stepNum}
+                          </div>
+                          <span className={`text-sm ${isDone ? 'text-green-400' : isCurrent ? 'text-primary' : 'text-muted-foreground'}`}>{step}</span>
+                        </div>
+                        {i < 4 && <span className="text-muted-foreground hidden sm:inline">→</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+                {job.progress_message && (
+                  <p className="text-sm text-muted-foreground mt-3">{job.progress_message}</p>
+                )}
+                <div className="mt-3">
+                  <Badge className={job.status === 'done' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'}>
+                    {job.status}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Metrics */}
+            <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+              {[
+                { label: 'Total Leads', value: leads.length, icon: Users },
+                { label: 'Com Site', value: withSite, icon: Globe },
+                { label: 'Com Email', value: withEmail, icon: Mail },
+                { label: 'Com Decisor', value: withDecisionMaker, icon: UserCheck },
+                { label: 'Taxa Preench.', value: `${fillRate}%`, icon: BarChart3 },
+              ].map(({ label, value, icon: Icon }) => (
+                <Card key={label}>
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold font-heading">{value}</p>
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Table */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-lg">Leads ({filtered.length})</CardTitle>
+                <Input placeholder="Buscar..." className="max-w-xs h-9" value={search} onChange={e => setSearch(e.target.value)} />
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-lg border border-border overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-secondary/50">
+                        {['Nome', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews', 'Decisor', 'Cargo', 'LinkedIn', 'E-mail', 'Status', 'Fonte'].map(h => (
+                          <th key={h} className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.length === 0 ? (
+                        <tr>
+                          <td colSpan={12} className="px-3 py-12 text-center text-muted-foreground">
+                            {leads.length === 0 ? 'Sem leads. Use "Dados de Exemplo" para testar.' : 'Nenhum resultado para a busca.'}
+                          </td>
+                        </tr>
+                      ) : filtered.map(l => (
+                        <tr key={l.id} className="border-b border-border hover:bg-secondary/30 transition-colors">
+                          <td className="px-3 py-2 whitespace-nowrap font-medium">{l.name}</td>
+                          <td className="px-3 py-2 max-w-[200px] truncate">{l.address}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{l.phone}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{l.website ? <a href={`https://${l.website}`} target="_blank" rel="noreferrer" className="text-primary hover:underline">{l.website}</a> : '—'}</td>
+                          <td className="px-3 py-2">{l.rating ?? '—'}</td>
+                          <td className="px-3 py-2">{l.reviews_count ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{l.decision_maker_name ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{l.decision_maker_role ?? '—'}</td>
+                          <td className="px-3 py-2">{l.linkedin_url ? <a href={l.linkedin_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">Ver</a> : '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{l.corporate_email ?? '—'}</td>
+                          <td className="px-3 py-2">
+                            <Badge variant="outline" className={l.email_status === 'verified' ? 'text-green-400 border-green-400/30' : l.email_status === 'catch-all' ? 'text-yellow-400 border-yellow-400/30' : 'text-muted-foreground'}>
+                              {l.email_status}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2">{l.source}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </main>
+    </div>
+  );
+};
+
+export default JobDetail;
