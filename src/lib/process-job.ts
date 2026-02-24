@@ -139,182 +139,78 @@ export async function processJob(
   }
 }
 
-// ─── Google Places ──────────────────────────────────────────────────
+// ─── Apify ───────────────────────────────────────────────────────────
 
-interface GoogleTextSearchResult {
-  place_id: string;
-  name: string;
-  formatted_address: string;
-}
-
-interface GoogleTextSearchResponse {
-  results: GoogleTextSearchResult[];
-  next_page_token?: string;
-  status: string;
-  error_message?: string;
-}
-
-interface GooglePlaceDetailsResponse {
-  result: {
-    name?: string;
-    formatted_address?: string;
-    international_phone_number?: string;
-    website?: string;
-    rating?: number;
-    user_ratings_total?: number;
-  };
-  status: string;
-  error_message?: string;
-}
-
-async function callProxy(action: string, params: Record<string, string>): Promise<any> {
-  const session = (await supabase.auth.getSession()).data.session;
-  if (!session) throw new Error('Usuário não autenticado');
-
-  const res = await fetchWithRetry(
-    `${SUPABASE_URL}/functions/v1/google-places-proxy`,
-    {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    },
-    JSON.stringify({ action, ...params }),
-  );
-
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  return data;
-}
-
-export async function processJobGooglePlaces(
+export async function processJobApify(
   jobId: string,
   businessType: string,
   locationText: string,
   quantity: number,
 ) {
   try {
-    // Step 1 – Text Search via proxy
     await updateJob(jobId, {
       status: 'running',
       progress_step: 1,
-      progress_message: 'Buscando empresas no Google Places...',
+      progress_message: 'Buscando empresas via Apify...',
     });
 
-    const allPlaces: GoogleTextSearchResult[] = [];
-    let nextPageToken: string | undefined;
+    const session = (await supabase.auth.getSession()).data.session;
+    if (!session) throw new Error('Usuário não autenticado');
 
-    while (allPlaces.length < quantity) {
-      const params: Record<string, string> = {
-        query: `${businessType} in ${locationText}`,
-      };
-      if (nextPageToken) params.pagetoken = nextPageToken;
+    const { data, error } = await supabase.functions.invoke('apify-maps-proxy', {
+      body: {
+        query: businessType,
+        locationText,
+        maxResults: quantity,
+      },
+    });
 
-      const data: GoogleTextSearchResponse = await callProxy('textsearch', params);
+    if (error) throw new Error(error.message || 'Erro ao chamar proxy Apify');
+    if (data?.error) throw new Error(data.error);
 
-      if (data.status === 'ZERO_RESULTS' || !data.results?.length) break;
+    const leads: any[] = data?.leads || [];
 
-      allPlaces.push(...data.results);
-      nextPageToken = data.next_page_token;
+    await updateJob(jobId, {
+      progress_step: 2,
+      progress_message: `Inserindo ${leads.length} leads...`,
+    });
 
-      if (!nextPageToken) break;
-      await delay(2000);
-    }
-
-    const places = allPlaces.slice(0, quantity);
-
-    if (places.length === 0) {
+    if (leads.length === 0) {
       await updateJob(jobId, {
         status: 'failed',
-        progress_message: 'Google Places: nenhum resultado encontrado.',
+        progress_message: 'Apify: nenhum resultado encontrado.',
       });
       return { success: false, error: 'Nenhum resultado encontrado' };
     }
 
-    // Step 2 – Place Details via proxy
-    await updateJob(jobId, {
-      progress_step: 2,
-      progress_message: `Enriquecendo ${places.length} lugares via Place Details...`,
-    });
+    const rows = leads.map(l => ({
+      job_id: jobId,
+      name: l.name,
+      address: l.address || '',
+      phone: l.phone || null,
+      website: l.website || null,
+      rating: l.rating || null,
+      reviews_count: l.reviews_count || null,
+      source: 'APIFY',
+    }));
 
-    const leadRows: Record<string, unknown>[] = [];
-
-    for (let i = 0; i < places.length; i++) {
-      const place = places[i];
-      if (i > 0) await delay(GOOGLE_RATE_LIMIT_MS);
-
-      if (i % 10 === 0 && i > 0) {
-        await updateJob(jobId, {
-          progress_message: `Detalhes: ${i}/${places.length} processados...`,
-        });
-      }
-
-      try {
-        const detail: GooglePlaceDetailsResponse = await callProxy('details', {
-          place_id: place.place_id,
-        });
-
-        if (detail.status === 'OK' && detail.result) {
-          const r = detail.result;
-          leadRows.push({
-            job_id: jobId,
-            name: r.name || place.name,
-            address: r.formatted_address || place.formatted_address || '',
-            phone: r.international_phone_number || null,
-            website: r.website || null,
-            rating: r.rating || null,
-            reviews_count: r.user_ratings_total || null,
-            source: 'GOOGLE',
-          });
-        } else {
-          leadRows.push({
-            job_id: jobId,
-            name: place.name,
-            address: place.formatted_address || '',
-            source: 'GOOGLE',
-          });
-        }
-      } catch {
-        leadRows.push({
-          job_id: jobId,
-          name: place.name,
-          address: place.formatted_address || '',
-          source: 'GOOGLE',
-        });
-      }
-    }
-
-    // Step 3 – Insert leads
-    await updateJob(jobId, {
-      progress_step: 3,
-      progress_message: `Inserindo ${leadRows.length} leads...`,
-    });
-
-    if (leadRows.length > 0) {
-      for (let i = 0; i < leadRows.length; i += 100) {
-        const batch = leadRows.slice(i, i + 100);
-        const { error } = await supabase.from('leads').insert(batch);
-        if (error) throw error;
-      }
-    }
-
-    if (leadRows.length === 0) {
-      await updateJob(jobId, {
-        status: 'failed',
-        progress_message: 'Nenhum lead inserido após processamento Google Places.',
-      });
-      return { success: false, error: 'Nenhum lead inserido' };
+    for (let i = 0; i < rows.length; i += 100) {
+      const batch = rows.slice(i, i + 100);
+      const { error: insertErr } = await supabase.from('leads').insert(batch);
+      if (insertErr) throw insertErr;
     }
 
     await updateJob(jobId, {
       status: 'done',
       progress_step: 5,
-      progress_message: `Concluído — ${leadRows.length} leads do Google Places`,
+      progress_message: `Concluído — ${rows.length} leads via Apify`,
     });
 
-    return { success: true, count: leadRows.length };
+    return { success: true, count: rows.length };
   } catch (err: any) {
     await updateJob(jobId, {
       status: 'failed',
-      progress_message: `Erro (Google Places): ${err.message}`,
+      progress_message: `Erro (Apify): ${err.message}`,
     });
     return { success: false, error: err.message };
   }
