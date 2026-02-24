@@ -214,7 +214,7 @@ const AppHome = () => {
               <div className="space-y-1.5 lg:col-span-2">
                 <Label className="text-xs">Localidade *</Label>
                 <Input
-                  placeholder="ex: São Paulo - SP"
+                  placeholder="ex: Recife, Fortaleza, Curitiba..."
                   value={form.location}
                   onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
                   className="h-9"
