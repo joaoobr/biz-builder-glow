@@ -239,11 +239,11 @@ Deno.serve(async (req) => {
 
     // ── Update job ──
     await supabase.from('jobs').update({
-      status: leads.length > 0 ? 'done' : 'failed',
-      progress_step: leads.length > 0 ? 5 : undefined,
+      status: 'done',
+      progress_step: 5,
       progress_message: leads.length > 0
         ? `Concluído — ${leads.length} leads via Apify`
-        : 'Apify: nenhum resultado encontrado.',
+        : 'Concluído. 0 leads encontrados para os critérios.',
     }).eq('id', jobId).eq('user_id', userId);
 
     const duration = Date.now() - start;
@@ -256,6 +256,22 @@ Deno.serve(async (req) => {
   } catch (err: any) {
     const msg = err.name === 'AbortError' ? `Timeout checking Apify run` : err.message;
     console.error(`[apify-check][error] ${msg}`);
+
+    // Try to update job with error so it doesn't hang
+    try {
+      const body = await req.clone().json().catch(() => ({}));
+      const jobId = (body as any)?.jobId;
+      if (jobId) {
+        const supabaseUrl = Deno.env.get('EXT_SUPABASE_URL') || Deno.env.get('SUPABASE_URL')!;
+        const supabaseServiceKey = Deno.env.get('EXT_SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const sb = createClient(supabaseUrl, supabaseServiceKey);
+        await sb.from('jobs').update({
+          status: 'failed',
+          progress_message: `Erro (Apify check): ${msg}`,
+        }).eq('id', jobId);
+      }
+    } catch (_) { /* best effort */ }
+
     return new Response(
       JSON.stringify({ error: msg }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
