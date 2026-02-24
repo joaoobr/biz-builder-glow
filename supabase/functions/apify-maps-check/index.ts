@@ -233,6 +233,7 @@ Deno.serve(async (req) => {
         website: l.website,
         rating: l.rating,
         reviews_count: l.reviews_count,
+        category_name: l.category_name,
         source: 'APIFY',
       }));
 
