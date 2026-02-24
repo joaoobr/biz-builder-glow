@@ -86,11 +86,19 @@ Deno.serve(async (req) => {
 
     // ── Parse body ──
     const body = await req.json();
-    const query = (body.query || '').trim();
-    const location = (body.location || '').replaceAll('/', ', ').trim();
-    const maxResults = body.limit ?? 20;
+    console.log(`[apify-start] raw-body keys=${Object.keys(body).join(',')} query="${body.query}" location="${body.location}" limit=${body.limit}`);
 
-    console.log(`[apify-start] after-body-parse query="${query}" location="${location}" max=${maxResults} elapsed=${Date.now() - start}ms`);
+    const query = (body.query || '').trim();
+    let location = (body.location || '').replaceAll('/', ', ').trim();
+
+    // Normalize: append ", Brasil" if no country detected
+    if (location && !/,\s*(brazil|brasil|br)\s*$/i.test(location)) {
+      location = `${location}, Brasil`;
+    }
+
+    const maxResults = Math.min(body.limit ?? 20, 100);
+
+    console.log(`[apify-start] after-normalize query="${query}" location="${location}" max=${maxResults} elapsed=${Date.now() - start}ms`);
 
     if (!query) {
       return new Response(
@@ -110,6 +118,14 @@ Deno.serve(async (req) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
+    const actorInput = {
+      searchStringsArray: [query],
+      locationQuery: location,
+      maxCrawledPlacesPerSearch: maxResults,
+    };
+
+    console.log(`[apify-start] actorInput=${JSON.stringify(actorInput)}`);
+
     const runRes = await fetch(
       `${APIFY_BASE}/acts/${encodeURIComponent(ACTOR_ID)}/runs?waitForFinish=0`,
       {
@@ -118,11 +134,7 @@ Deno.serve(async (req) => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apifyToken}`,
         },
-        body: JSON.stringify({
-          searchStringsArray: [query],
-          locationQuery: location,
-          maxCrawledPlacesPerSearch: Math.min(maxResults, 100),
-        }),
+        body: JSON.stringify(actorInput),
         signal: controller.signal,
       },
     );
