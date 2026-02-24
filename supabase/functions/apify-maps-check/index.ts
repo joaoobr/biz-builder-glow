@@ -10,6 +10,8 @@ const FETCH_TIMEOUT_MS = 25_000;
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 interface ApifyItem {
+  placeId?: string;
+  googleId?: string;
   title?: string;
   address?: string;
   phone?: string;
@@ -46,7 +48,13 @@ function normalizeItems(items: ApifyItem[], maxResults: number): NormalizedLead[
     const address = (item.address || '').trim();
     if (!name) continue;
 
-    const key = `${name.toLowerCase()}|${address.toLowerCase()}`;
+    // Dedup key: placeId > googleId > name+address
+    const key = item.placeId
+      ? `pid:${item.placeId}`
+      : item.googleId
+        ? `gid:${item.googleId}`
+        : `na:${name.toLowerCase()}|${address.toLowerCase()}`;
+
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -78,8 +86,6 @@ Deno.serve(async (req) => {
   const start = Date.now();
 
   try {
-    console.log(`[apify-check] begin`);
-
     // ── Auth ──
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -91,7 +97,6 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('EXT_SUPABASE_URL') || Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('EXT_SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!;
-    // Service role for writing leads on behalf of user
     const supabaseServiceKey = Deno.env.get('EXT_SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
     const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
@@ -108,8 +113,6 @@ Deno.serve(async (req) => {
     }
 
     const userId = claimsData.claims.sub as string;
-
-    // Service-role client for DB writes
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ── Apify Token ──
@@ -141,7 +144,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[apify-check] user=${userId} runId=${runId} jobId=${jobId} elapsed=${Date.now() - start}ms`);
+    console.log(`[apify-check] user=${userId} runId=${runId} jobId=${jobId}`);
 
     // ── Check run status ──
     const controller1 = new AbortController();
@@ -158,7 +161,7 @@ Deno.serve(async (req) => {
     }
 
     const statusData = await statusRes.json();
-    const runStatus = statusData?.data?.status; // READY, RUNNING, SUCCEEDED, FAILED, ABORTED, TIMED-OUT
+    const runStatus = statusData?.data?.status;
 
     console.log(`[apify-check] runStatus=${runStatus} elapsed=${Date.now() - start}ms`);
 
@@ -170,7 +173,6 @@ Deno.serve(async (req) => {
     }
 
     if (runStatus !== 'SUCCEEDED') {
-      // Update job as failed
       await supabase.from('jobs').update({
         status: 'failed',
         progress_message: `Apify run ${runStatus}: ${statusData?.data?.statusMessage || 'Unknown error'}`,
@@ -188,7 +190,7 @@ Deno.serve(async (req) => {
       throw new Error('Run succeeded but no datasetId found');
     }
 
-    console.log(`[apify-check] fetching dataset=${datasetId} elapsed=${Date.now() - start}ms`);
+    console.log(`[apify-check] fetching dataset=${datasetId}`);
 
     const controller2 = new AbortController();
     const timer2 = setTimeout(() => controller2.abort(), FETCH_TIMEOUT_MS);
@@ -209,7 +211,7 @@ Deno.serve(async (req) => {
     const items: ApifyItem[] = await dsRes.json();
     const leads = normalizeItems(items, maxResults);
 
-    console.log(`[apify-check] items=${items.length} leads=${leads.length} elapsed=${Date.now() - start}ms`);
+    console.log(`[apify-check] raw=${items.length} deduped=${leads.length} elapsed=${Date.now() - start}ms`);
 
     // ── Insert leads ──
     if (leads.length > 0) {
@@ -238,26 +240,26 @@ Deno.serve(async (req) => {
     }
 
     // ── Update job ──
+    const now = new Date().toISOString();
     await supabase.from('jobs').update({
       status: 'done',
       progress_step: 5,
       progress_message: leads.length > 0
-        ? `Concluído — ${leads.length} leads via Apify`
+        ? `Concluído — ${leads.length} leads via Apify (dedup de ${items.length} resultados)`
         : 'Concluído. 0 leads encontrados para os critérios.',
+      finished_at: now,
     }).eq('id', jobId).eq('user_id', userId);
 
-    const duration = Date.now() - start;
-    console.log(`[apify-check] done leads=${leads.length} elapsed=${duration}ms`);
+    console.log(`[apify-check] done leads=${leads.length} elapsed=${Date.now() - start}ms`);
 
     return new Response(
       JSON.stringify({ status: 'done', count: leads.length }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err: any) {
-    const msg = err.name === 'AbortError' ? `Timeout checking Apify run` : err.message;
+    const msg = err.name === 'AbortError' ? 'Timeout checking Apify run' : err.message;
     console.error(`[apify-check][error] ${msg}`);
 
-    // Try to update job with error so it doesn't hang
     try {
       const body = await req.clone().json().catch(() => ({}));
       const jobId = (body as any)?.jobId;

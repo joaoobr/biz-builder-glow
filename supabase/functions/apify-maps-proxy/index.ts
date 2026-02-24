@@ -6,26 +6,7 @@ const corsHeaders = {
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const ACTOR_ID = 'compass/crawler-google-places';
-const FETCH_TIMEOUT_MS = 25_000; // <30s to stay within edge function limits
-
-// Rate limiter per isolate
-const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX = 30;
-
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const timestamps = (rateLimitMap.get(userId) || []).filter(
-    (t) => now - t < RATE_LIMIT_WINDOW_MS,
-  );
-  if (timestamps.length >= RATE_LIMIT_MAX) {
-    rateLimitMap.set(userId, timestamps);
-    return false;
-  }
-  timestamps.push(now);
-  rateLimitMap.set(userId, timestamps);
-  return true;
-}
+const FETCH_TIMEOUT_MS = 8_000; // 8s hard limit
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -37,8 +18,6 @@ Deno.serve(async (req) => {
   const start = Date.now();
 
   try {
-    console.log(`[apify-start] begin`);
-
     // ── Auth ──
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -64,16 +43,6 @@ Deno.serve(async (req) => {
     }
 
     const userId = claimsData.claims.sub as string;
-    console.log(`[apify-start] authenticated user=${userId} elapsed=${Date.now() - start}ms`);
-
-    // ── Rate limit ──
-    if (!checkRateLimit(userId)) {
-      console.log(`[rate-limit] user=${userId}`);
-      return new Response(
-        JSON.stringify({ error: 'Rate limit exceeded (30 req/min)' }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
 
     // ── Apify Token ──
     const apifyToken = Deno.env.get('APIFY_TOKEN');
@@ -86,47 +55,53 @@ Deno.serve(async (req) => {
 
     // ── Parse body ──
     const body = await req.json();
-    console.log(`[apify-start] raw-body keys=${Object.keys(body).join(',')} query="${body.query}" location="${body.location}" limit=${body.limit}`);
-
-    const query = (body.query || '').trim();
+    const jobId = (body.jobId || '').trim();
+    const businessType = (body.businessType || body.query || '').trim();
     let location = (body.location || '').replaceAll('/', ', ').trim();
+    const maxResults = Math.min(body.maxResults ?? body.limit ?? 20, 100);
 
-    // Normalize: append ", Brasil" if no country detected
-    if (location && !/,\s*(brazil|brasil|br)\s*$/i.test(location)) {
-      location = `${location}, Brasil`;
-    }
-
-    const maxResults = Math.min(body.limit ?? 20, 100);
-
-    console.log(`[apify-start] after-normalize query="${query}" location="${location}" max=${maxResults} elapsed=${Date.now() - start}ms`);
-
-    if (!query) {
+    if (!businessType) {
       return new Response(
-        JSON.stringify({ error: 'query is required' }),
+        JSON.stringify({ error: 'businessType é obrigatório' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
     if (!location) {
       return new Response(
-        JSON.stringify({ error: 'location is required' }),
+        JSON.stringify({ error: 'location é obrigatória' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    // ── Start Actor Run (async — waitForFinish=0) ──
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    // Guard: location must not equal businessType
+    if (location.toLowerCase() === businessType.toLowerCase()) {
+      return new Response(
+        JSON.stringify({ error: `Localidade inválida: "${location}" é igual ao tipo de negócio. Informe cidade/estado.` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
-    const searchString = `${query} ${location}`.trim();
+    // Normalize: append ", Brasil" if no country detected
+    if (!/,\s*(brazil|brasil|br)\s*$/i.test(location)) {
+      location = `${location}, Brasil`;
+    }
+
+    // ── Build actor input ──
+    // searchStringsArray = [businessType] (what to search)
+    // locationQuery = location (where to search) — NEVER businessType
     const actorInput = {
-      searchStringsArray: [searchString],
+      searchStringsArray: [businessType],
       locationQuery: location,
       maxCrawledPlacesPerSearch: maxResults,
       language: 'pt',
     };
 
-    console.log(`[apify-start] actorInput=${JSON.stringify(actorInput)}`);
+    console.log(`[apify-proxy] user=${userId} jobId=${jobId} input=${JSON.stringify(actorInput)} elapsed=${Date.now() - start}ms`);
+
+    // ── Start Actor Run (waitForFinish=0) ──
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     const runRes = await fetch(
       `${APIFY_BASE}/acts/${encodeURIComponent(ACTOR_ID)}/runs?waitForFinish=0`,
@@ -150,22 +125,20 @@ Deno.serve(async (req) => {
 
     const runData = await runRes.json();
     const runId = runData?.data?.id;
-    const datasetId = runData?.data?.defaultDatasetId;
 
     if (!runId) {
       throw new Error(`Apify run missing id: ${JSON.stringify(runData?.data?.status || runData)}`);
     }
 
-    const duration = Date.now() - start;
-    console.log(`[apify-start] apify-run-started runId=${runId} datasetId=${datasetId} elapsed=${duration}ms`);
+    console.log(`[apify-proxy] run started runId=${runId} elapsed=${Date.now() - start}ms`);
 
     return new Response(
-      JSON.stringify({ runId, datasetId, status: 'processing' }),
+      JSON.stringify({ runId, status: 'processing' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err: any) {
-    const msg = err.name === 'AbortError' ? `Timeout (${FETCH_TIMEOUT_MS / 1000}s) starting Apify run` : err.message;
-    console.error(`[apify-start][error] ${msg}`);
+    const msg = err.name === 'AbortError' ? 'Timeout (8s) ao iniciar run no Apify' : err.message;
+    console.error(`[apify-proxy][error] ${msg}`);
     return new Response(
       JSON.stringify({ error: msg }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

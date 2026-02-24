@@ -10,7 +10,7 @@ const MAX_RETRIES = 3;
 const BACKOFF_MS = [1000, 3000, 7000];
 
 const APIFY_POLL_INTERVAL_MS = 5000;
-const APIFY_MAX_POLL_TIME_MS = 300_000; // 5 minutes max
+const APIFY_MAX_POLL_TIME_MS = 600_000; // 10 minutes max
 
 function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -209,18 +209,19 @@ export async function processJobApifyMaps(
       return { success: false, error: 'Localidade inválida (igual ao tipo de negócio)' };
     }
 
-    // Build the correct payload
+    // Build the correct payload — proxy expects these exact fields
     const apifyPayload = {
-      query: trimmedBusiness,
+      jobId,
+      businessType: trimmedBusiness,
       location: trimmedLocation,
-      limit: quantity,
+      maxResults: quantity,
     };
 
     await updateJob(jobId, {
-      progress_message: `Iniciando Apify — query="${trimmedBusiness}" location="${trimmedLocation}" limit=${quantity}`,
+      progress_message: `Iniciando Apify — businessType="${trimmedBusiness}" location="${trimmedLocation}" max=${quantity}`,
     });
 
-    // Step 1: Start the Apify run (returns immediately)
+    // Step 1: Start the Apify run (returns immediately, <8s)
     const { data: startData, error: startError } = await supabase.functions.invoke('apify-maps-proxy', {
       body: apifyPayload,
       headers,
