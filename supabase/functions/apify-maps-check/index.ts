@@ -227,7 +227,6 @@ Deno.serve(async (req) => {
     if (leads.length > 0) {
       const rows = leads.map(l => ({
         job_id: jobId,
-        user_id: userId,
         name: l.name,
         address: l.address,
         phone: l.phone,
