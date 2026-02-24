@@ -1,0 +1,264 @@
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+};
+
+const APIFY_BASE = 'https://api.apify.com/v2';
+const FETCH_TIMEOUT_MS = 25_000;
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+interface ApifyItem {
+  title?: string;
+  address?: string;
+  phone?: string;
+  website?: string;
+  totalScore?: number;
+  reviewsCount?: number;
+  city?: string;
+  state?: string;
+  countryCode?: string;
+  categoryName?: string;
+  [key: string]: unknown;
+}
+
+interface NormalizedLead {
+  name: string;
+  address: string;
+  phone: string | null;
+  website: string | null;
+  rating: number | null;
+  reviews_count: number | null;
+  city: string | null;
+  state: string | null;
+  country_code: string | null;
+  category_name: string | null;
+  source: string;
+}
+
+function normalizeItems(items: ApifyItem[], maxResults: number): NormalizedLead[] {
+  const seen = new Set<string>();
+  const results: NormalizedLead[] = [];
+
+  for (const item of items) {
+    const name = (item.title || '').trim();
+    const address = (item.address || '').trim();
+    if (!name) continue;
+
+    const key = `${name.toLowerCase()}|${address.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    results.push({
+      name,
+      address,
+      phone: item.phone || null,
+      website: item.website || null,
+      rating: item.totalScore ?? null,
+      reviews_count: item.reviewsCount ?? null,
+      city: item.city || null,
+      state: item.state || null,
+      country_code: item.countryCode || null,
+      category_name: item.categoryName || null,
+      source: 'APIFY',
+    });
+
+    if (results.length >= maxResults) break;
+  }
+
+  return results;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const start = Date.now();
+
+  try {
+    console.log(`[apify-check] begin`);
+
+    // ── Auth ──
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const supabaseUrl = Deno.env.get('EXT_SUPABASE_URL') || Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('EXT_SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!;
+    // Service role for writing leads on behalf of user
+    const supabaseServiceKey = Deno.env.get('EXT_SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const userId = claimsData.claims.sub as string;
+
+    // Service-role client for DB writes
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // ── Apify Token ──
+    const apifyToken = Deno.env.get('APIFY_TOKEN');
+    if (!apifyToken) {
+      return new Response(
+        JSON.stringify({ error: 'APIFY_TOKEN not configured on server' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── Parse body ──
+    const body = await req.json();
+    const runId = (body.runId || '').trim();
+    const jobId = (body.jobId || '').trim();
+    const maxResults = body.limit ?? 20;
+
+    if (!runId) {
+      return new Response(
+        JSON.stringify({ error: 'runId is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    if (!jobId) {
+      return new Response(
+        JSON.stringify({ error: 'jobId is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    console.log(`[apify-check] user=${userId} runId=${runId} jobId=${jobId} elapsed=${Date.now() - start}ms`);
+
+    // ── Check run status ──
+    const controller1 = new AbortController();
+    const timer1 = setTimeout(() => controller1.abort(), FETCH_TIMEOUT_MS);
+
+    const statusRes = await fetch(`${APIFY_BASE}/actor-runs/${runId}`, {
+      headers: { Authorization: `Bearer ${apifyToken}` },
+      signal: controller1.signal,
+    });
+    clearTimeout(timer1);
+
+    if (!statusRes.ok) {
+      throw new Error(`Failed to check run status: HTTP ${statusRes.status}`);
+    }
+
+    const statusData = await statusRes.json();
+    const runStatus = statusData?.data?.status; // READY, RUNNING, SUCCEEDED, FAILED, ABORTED, TIMED-OUT
+
+    console.log(`[apify-check] runStatus=${runStatus} elapsed=${Date.now() - start}ms`);
+
+    if (runStatus === 'RUNNING' || runStatus === 'READY') {
+      return new Response(
+        JSON.stringify({ status: 'processing', runStatus }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    if (runStatus !== 'SUCCEEDED') {
+      // Update job as failed
+      await supabase.from('jobs').update({
+        status: 'failed',
+        progress_message: `Apify run ${runStatus}: ${statusData?.data?.statusMessage || 'Unknown error'}`,
+      }).eq('id', jobId).eq('user_id', userId);
+
+      return new Response(
+        JSON.stringify({ status: 'failed', runStatus, error: statusData?.data?.statusMessage || runStatus }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── SUCCEEDED — fetch dataset ──
+    const datasetId = statusData?.data?.defaultDatasetId;
+    if (!datasetId) {
+      throw new Error('Run succeeded but no datasetId found');
+    }
+
+    console.log(`[apify-check] fetching dataset=${datasetId} elapsed=${Date.now() - start}ms`);
+
+    const controller2 = new AbortController();
+    const timer2 = setTimeout(() => controller2.abort(), FETCH_TIMEOUT_MS);
+
+    const dsRes = await fetch(
+      `${APIFY_BASE}/datasets/${datasetId}/items?format=json`,
+      {
+        headers: { Authorization: `Bearer ${apifyToken}` },
+        signal: controller2.signal,
+      },
+    );
+    clearTimeout(timer2);
+
+    if (!dsRes.ok) {
+      throw new Error(`Failed to fetch dataset: HTTP ${dsRes.status}`);
+    }
+
+    const items: ApifyItem[] = await dsRes.json();
+    const leads = normalizeItems(items, maxResults);
+
+    console.log(`[apify-check] items=${items.length} leads=${leads.length} elapsed=${Date.now() - start}ms`);
+
+    // ── Insert leads ──
+    if (leads.length > 0) {
+      const rows = leads.map(l => ({
+        job_id: jobId,
+        user_id: userId,
+        name: l.name,
+        address: l.address,
+        phone: l.phone,
+        website: l.website,
+        rating: l.rating,
+        reviews_count: l.reviews_count,
+        city: l.city,
+        state: l.state,
+        country_code: l.country_code,
+        category_name: l.category_name,
+        source: 'APIFY',
+        status: 'found',
+      }));
+
+      for (let i = 0; i < rows.length; i += 100) {
+        const batch = rows.slice(i, i + 100);
+        const { error: insertErr } = await supabase.from('leads').insert(batch);
+        if (insertErr) throw new Error(`Insert failed: ${insertErr.message}`);
+      }
+    }
+
+    // ── Update job ──
+    await supabase.from('jobs').update({
+      status: leads.length > 0 ? 'done' : 'failed',
+      progress_step: leads.length > 0 ? 5 : undefined,
+      progress_message: leads.length > 0
+        ? `Concluído — ${leads.length} leads via Apify`
+        : 'Apify: nenhum resultado encontrado.',
+    }).eq('id', jobId).eq('user_id', userId);
+
+    const duration = Date.now() - start;
+    console.log(`[apify-check] done leads=${leads.length} elapsed=${duration}ms`);
+
+    return new Response(
+      JSON.stringify({ status: 'done', count: leads.length }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  } catch (err: any) {
+    const msg = err.name === 'AbortError' ? `Timeout checking Apify run` : err.message;
+    console.error(`[apify-check][error] ${msg}`);
+    return new Response(
+      JSON.stringify({ error: msg }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+});
