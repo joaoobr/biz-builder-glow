@@ -1,6 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -11,12 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Plus, LogOut, History, Settings, Zap, Users, Globe, Mail, UserCheck, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { processJob } from '@/lib/process-job';
+
 
 const AppHome = () => {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [progressMsg, setProgressMsg] = useState('');
+  const [leads, setLeads] = useState<any[]>([]);
   const [form, setForm] = useState({
     business_type: '',
     location: '',
@@ -24,6 +29,15 @@ const AppHome = () => {
     radius_km: 10,
     source: 'OSM',
   });
+
+  const fetchLeads = useCallback(async (jobId: string) => {
+    const { data } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: true });
+    setLeads(data || []);
+  }, []);
 
   if (loading) {
     return (
@@ -54,12 +68,41 @@ const AppHome = () => {
       }).select().single();
 
       if (error) throw error;
-      toast({ title: 'Job criado com sucesso!' });
-      navigate(`/jobs/${data.id}`);
+      toast({ title: 'Job criado! Processando...' });
+      setCreating(false);
+
+      // Process job client-side
+      setProcessing(true);
+      setProgressMsg('Iniciando processamento...');
+
+      // Poll job status for progress updates
+      const pollInterval = setInterval(async () => {
+        const { data: job } = await supabase
+          .from('jobs')
+          .select('progress_message, status')
+          .eq('id', data.id)
+          .single();
+        if (job?.progress_message) setProgressMsg(job.progress_message);
+        if (job?.status === 'done' || job?.status === 'failed') {
+          clearInterval(pollInterval);
+        }
+      }, 1500);
+
+      const result = await processJob(data.id, form.business_type, form.location, form.quantity);
+      clearInterval(pollInterval);
+
+      if (result.success) {
+        toast({ title: `Concluído! ${result.count} leads encontrados.` });
+        await fetchLeads(data.id);
+      } else {
+        toast({ title: 'Erro no processamento', description: result.error, variant: 'destructive' });
+      }
+      setProcessing(false);
+      setProgressMsg('');
     } catch (e: any) {
       toast({ title: 'Erro ao criar job', description: e.message, variant: 'destructive' });
-    } finally {
       setCreating(false);
+      setProcessing(false);
     }
   };
 
@@ -158,22 +201,32 @@ const AppHome = () => {
                 </Select>
               </div>
               <div className="flex items-end">
-                <Button onClick={handleCreate} disabled={creating} size="lg" className="w-full h-10">
-                  {creating ? 'Criando...' : 'Criar Job'}
+                <Button onClick={handleCreate} disabled={creating || processing} size="lg" className="w-full h-10">
+                  {creating ? 'Criando...' : processing ? 'Processando...' : 'Criar Job'}
                 </Button>
               </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Progress indicator */}
+        {processing && progressMsg && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              <span className="text-sm font-medium">{progressMsg}</span>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Metrics */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
           {[
-            { label: 'Total Leads', value: '—', icon: Users },
-            { label: 'Com Site', value: '—', icon: Globe },
-            { label: 'Com Email', value: '—', icon: Mail },
-            { label: 'Com Decisor', value: '—', icon: UserCheck },
-            { label: 'Taxa Preench.', value: '—', icon: BarChart3 },
+            { label: 'Total Leads', value: leads.length > 0 ? String(leads.length) : '—', icon: Users },
+            { label: 'Com Site', value: leads.filter(l => l.website).length > 0 ? String(leads.filter(l => l.website).length) : '—', icon: Globe },
+            { label: 'Com Email', value: leads.filter(l => l.email).length > 0 ? String(leads.filter(l => l.email).length) : '—', icon: Mail },
+            { label: 'Com Decisor', value: leads.filter(l => l.decision_maker_name).length > 0 ? String(leads.filter(l => l.decision_maker_name).length) : '—', icon: UserCheck },
+            { label: 'Taxa Preench.', value: leads.length > 0 ? `${Math.round((leads.filter(l => l.website || l.email).length / leads.length) * 100)}%` : '—', icon: BarChart3 },
           ].map(({ label, value, icon: Icon }) => (
             <Card key={label} className="bg-card">
               <CardContent className="p-4 flex items-center gap-3">
@@ -228,11 +281,30 @@ const AppHome = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td colSpan={12} className="px-3 py-12 text-center text-muted-foreground">
-                      Crie um job para ver resultados aqui.
-                    </td>
-                  </tr>
+                  {leads.length === 0 ? (
+                    <tr>
+                      <td colSpan={12} className="px-3 py-12 text-center text-muted-foreground">
+                        Crie um job para ver resultados aqui.
+                      </td>
+                    </tr>
+                  ) : (
+                    leads.map((lead, i) => (
+                      <tr key={lead.id || i} className="border-b border-border hover:bg-secondary/30">
+                        <td className="px-3 py-2 whitespace-nowrap">{lead.name || '—'}</td>
+                        <td className="px-3 py-2 max-w-[200px] truncate">{lead.address || '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{lead.phone || '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{lead.website || '—'}</td>
+                        <td className="px-3 py-2">{lead.rating || '—'}</td>
+                        <td className="px-3 py-2">{lead.reviews_count || '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{lead.decision_maker_name || '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{lead.decision_maker_title || '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{lead.linkedin_url || '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{lead.email || '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{lead.email_status || '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{lead.source || '—'}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
