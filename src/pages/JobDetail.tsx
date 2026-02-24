@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3, RefreshCw, Search } from 'lucide-react';
 import { insertFakeLeads } from '@/lib/fake-data';
 import { Lead, exportLeadsToCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +24,7 @@ const JobDetail = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [inserting, setInserting] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const [enrichingWebsite, setEnrichingWebsite] = useState(false);
 
   const fetchData = async () => {
     if (!id || !user) return;
@@ -95,11 +96,61 @@ const JobDetail = () => {
     setResuming(false);
   };
 
+  const handleEnrichWebsite = async () => {
+    if (!id) return;
+    setEnrichingWebsite(true);
+    toast({ title: 'Iniciando busca de websites...' });
+
+    const pollInterval = setInterval(async () => {
+      const { data: updatedJob } = await supabase
+        .from('jobs')
+        .select('progress_message, progress_step, status')
+        .eq('id', id)
+        .single();
+      if (updatedJob) setJob((prev: any) => ({ ...prev, ...updatedJob }));
+    }, 2000);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      const { data, error } = await supabase.functions.invoke('website-enrich', {
+        body: { jobId: id },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
+
+      clearInterval(pollInterval);
+
+      if (error) {
+        // Try to extract friendly error
+        let msg = 'Erro ao enriquecer websites';
+        try {
+          if (error.context && typeof error.context.json === 'function') {
+            const body = await error.context.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch {}
+        toast({ title: 'Erro', description: msg, variant: 'destructive' });
+      } else if (data?.error) {
+        toast({ title: 'Erro', description: data.error, variant: 'destructive' });
+      } else {
+        toast({ title: `Concluído! ${data?.updatedCount ?? 0} sites encontrados.` });
+      }
+
+      await fetchData();
+    } catch (e: any) {
+      clearInterval(pollInterval);
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    } finally {
+      setEnrichingWebsite(false);
+    }
+  };
+
   const filtered = leads.filter(l =>
     !search || Object.values(l).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))
   );
 
-  const withSite = leads.filter(l => l.website).length;
+  const withSite = leads.filter(l => l.website_url || l.website).length;
   const withEmail = leads.filter(l => l.corporate_email).length;
   const withDecisionMaker = leads.filter(l => l.decision_maker_name).length;
   const fillRate = leads.length ? Math.round(((withSite + withEmail + withDecisionMaker) / (leads.length * 3)) * 100) : 0;
@@ -166,10 +217,21 @@ const JobDetail = () => {
                 {job.progress_message && (
                   <p className="text-sm text-muted-foreground mt-3">{job.progress_message}</p>
                 )}
-                <div className="mt-3">
+                <div className="mt-3 flex items-center gap-2">
                   <Badge className={job.status === 'done' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-destructive/20 text-destructive' : job.status === 'processing' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-primary/20 text-primary'}>
                     {job.status}
                   </Badge>
+                  {leads.length > 0 && progressStep >= 1 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleEnrichWebsite}
+                      disabled={enrichingWebsite || job.status === 'running'}
+                    >
+                      <Search className={`h-4 w-4 mr-1.5 ${enrichingWebsite ? 'animate-pulse' : ''}`} />
+                      {enrichingWebsite ? 'Buscando sites...' : '2. Encontrar Site'}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -225,7 +287,21 @@ const JobDetail = () => {
                           <td className="px-3 py-2 whitespace-nowrap font-medium">{l.name}</td>
                           <td className="px-3 py-2 max-w-[200px] truncate">{l.address}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{l.phone}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{l.website ? <a href={`https://${l.website}`} target="_blank" rel="noreferrer" className="text-primary hover:underline">{l.website}</a> : '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{(() => {
+                            const url = l.website_url || l.website;
+                            if (!url) return '—';
+                            const href = url.startsWith('http') ? url : `https://${url}`;
+                            return (
+                              <span className="flex items-center gap-1">
+                                <a href={href} target="_blank" rel="noreferrer" className="text-primary hover:underline">{url.replace(/^https?:\/\//, '').slice(0, 30)}</a>
+                                {l.website_confidence != null && (
+                                  <span className={`text-[10px] ${l.website_confidence >= 80 ? 'text-green-400' : l.website_confidence >= 50 ? 'text-yellow-400' : 'text-muted-foreground'}`}>
+                                    {l.website_confidence}%
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })()}</td>
                           <td className="px-3 py-2">{l.rating ?? '—'}</td>
                           <td className="px-3 py-2">{l.reviews_count ?? '—'}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{l.decision_maker_name ?? '—'}</td>
