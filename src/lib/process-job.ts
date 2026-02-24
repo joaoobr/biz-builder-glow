@@ -156,14 +156,12 @@ export async function processJobApifyMaps(
       progress_message: 'Buscando empresas via Apify (Google Maps)...',
     });
 
-    const query = `${businessType} ${locationText}`;
-
     // Get current session token for explicit auth
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData?.session?.access_token;
 
     const { data, error } = await supabase.functions.invoke('apify-maps-proxy', {
-      body: { query, locationText, limit: quantity },
+      body: { query: businessType, location: locationText, limit: quantity },
       headers: {
         Authorization: accessToken
           ? `Bearer ${accessToken}`

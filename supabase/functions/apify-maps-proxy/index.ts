@@ -155,18 +155,26 @@ Deno.serve(async (req) => {
 
     // ── Parse body ──
     const body = await req.json();
-    const { query, locationText, limit, maxResults: legacyMax } = body;
-    const maxResults = limit ?? legacyMax ?? 20;
+    const query = (body.query || '').trim();
+    const location = (body.location || '').replaceAll('/', ', ').trim();
+    const maxResults = body.limit ?? 20;
 
-    if (!query || !locationText) {
+    if (!query) {
       return new Response(
-        JSON.stringify({ error: 'Missing "query" and "locationText"' }),
+        JSON.stringify({ error: 'query is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    if (!location) {
+      return new Response(
+        JSON.stringify({ error: 'location is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
     // ── Run Actor ──
-    console.log(`[apify-start] user=${userId} query="${query}" location="${locationText}" max=${maxResults}`);
+    console.log(`[apify-start] user=${userId} query="${query}" location="${location}" max=${maxResults}`);
 
     const runRes = await fetchWithRetry(
       `${APIFY_BASE}/acts/${encodeURIComponent(ACTOR_ID)}/runs?waitForFinish=300`,
@@ -178,9 +186,8 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           searchStringsArray: [query],
-          locationQuery: locationText,
+          locationQuery: location,
           maxCrawledPlacesPerSearch: Math.min(maxResults, 100),
-          language: 'pt',
         }),
       },
     );
