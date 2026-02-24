@@ -283,16 +283,88 @@ export async function processJobApifyMaps(
       throw new Error(`Status inesperado do Apify: ${status}`);
     }
 
-    // Timeout
+    // Timeout — allow resume
     await updateJob(jobId, {
-      status: 'failed',
-      progress_message: `Timeout: Apify não completou em ${APIFY_MAX_POLL_TIME_MS / 1000}s`,
+      status: 'processing',
+      progress_message: `A busca está demorando. Você pode retomar este job. (runId: ${runId?.slice(0, 8)}...)`,
     });
-    return { success: false, error: 'Timeout aguardando Apify' };
+    return { success: false, error: 'A busca está demorando. Você pode retomar este job.' };
   } catch (err: any) {
     await updateJob(jobId, {
       status: 'failed',
       progress_message: `Erro (Apify): ${err.message}`,
+    });
+    return { success: false, error: err.message };
+  }
+}
+
+// ─── Resume an existing Apify job ────────────────────────────────────
+
+export async function resumeJobApifyMaps(
+  jobId: string,
+  apifyRunId: string,
+  quantity: number,
+) {
+  try {
+    await updateJob(jobId, {
+      status: 'running',
+      progress_message: `Retomando polling do Apify (${apifyRunId.slice(0, 8)}...)...`,
+    });
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    const headers = getAuthHeaders(accessToken);
+
+    const pollStart = Date.now();
+
+    while (Date.now() - pollStart < APIFY_MAX_POLL_TIME_MS) {
+      await delay(APIFY_POLL_INTERVAL_MS);
+
+      const { data: checkData, error: checkError } = await supabase.functions.invoke('apify-maps-check', {
+        body: { runId: apifyRunId, jobId, limit: quantity },
+        headers,
+      });
+
+      if (checkError) {
+        const msg = await extractFunctionError(checkError, 'Erro ao verificar status do Apify.');
+        throw new Error(msg);
+      }
+      if (checkData?.error) throw new Error(checkData.error);
+
+      const status = checkData?.status;
+
+      if (status === 'processing') {
+        const elapsed = Math.round((Date.now() - pollStart) / 1000);
+        await updateJob(jobId, {
+          progress_message: `Retomado — Apify processando... (${elapsed}s)`,
+        });
+        continue;
+      }
+
+      if (status === 'done') {
+        return { success: true, count: checkData.count || 0 };
+      }
+
+      if (status === 'failed') {
+        await updateJob(jobId, {
+          status: 'failed',
+          progress_message: `Apify falhou: ${checkData.error || 'erro desconhecido'}`,
+        });
+        return { success: false, error: checkData.error || 'Apify run falhou' };
+      }
+
+      throw new Error(`Status inesperado do Apify: ${status}`);
+    }
+
+    await updateJob(jobId, {
+      status: 'processing',
+      progress_message: `A busca continua demorando. Tente retomar novamente.`,
+    });
+    return { success: false, error: 'Timeout aguardando Apify. Tente retomar novamente.' };
+  } catch (err: any) {
+    await updateJob(jobId, {
+      status: 'failed',
+      progress_message: `Erro (Apify resume): ${err.message}`,
     });
     return { success: false, error: err.message };
   }

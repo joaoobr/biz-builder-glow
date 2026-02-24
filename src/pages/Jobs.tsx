@@ -20,6 +20,7 @@ interface Job {
 const statusColor: Record<string, string> = {
   queued: 'bg-muted text-muted-foreground',
   running: 'bg-primary/20 text-primary',
+  processing: 'bg-yellow-500/20 text-yellow-400',
   done: 'bg-green-500/20 text-green-400',
   failed: 'bg-destructive/20 text-destructive',
 };
