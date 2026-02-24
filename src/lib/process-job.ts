@@ -212,9 +212,9 @@ export async function processJobApifyMaps(
     // Build the correct payload — proxy expects these exact fields
     const apifyPayload = {
       jobId,
-      businessType: trimmedBusiness,
+      query: trimmedBusiness,
       location: trimmedLocation,
-      maxResults: quantity,
+      limit: quantity,
     };
 
     await updateJob(jobId, {

@@ -22,6 +22,8 @@ interface ApifyItem {
   state?: string;
   countryCode?: string;
   categoryName?: string;
+  url?: string;
+  location?: { lat?: number; lng?: number };
   [key: string]: unknown;
 }
 
@@ -36,7 +38,12 @@ interface NormalizedLead {
   state: string | null;
   country_code: string | null;
   category_name: string | null;
+  google_maps_url: string | null;
+  place_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
   source: string;
+  raw: Record<string, unknown>;
 }
 
 function normalizeItems(items: ApifyItem[], maxResults: number): NormalizedLead[] {
@@ -48,7 +55,6 @@ function normalizeItems(items: ApifyItem[], maxResults: number): NormalizedLead[
     const address = (item.address || '').trim();
     if (!name) continue;
 
-    // Dedup key: placeId > googleId > name+address
     const key = item.placeId
       ? `pid:${item.placeId}`
       : item.googleId
@@ -69,7 +75,12 @@ function normalizeItems(items: ApifyItem[], maxResults: number): NormalizedLead[
       state: item.state || null,
       country_code: item.countryCode || null,
       category_name: item.categoryName || null,
+      google_maps_url: item.url || null,
+      place_id: item.placeId || null,
+      latitude: item.location?.lat ?? null,
+      longitude: item.location?.lng ?? null,
       source: 'APIFY',
+      raw: item as Record<string, unknown>,
     });
 
     if (results.length >= maxResults) break;
@@ -103,16 +114,15 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser();
+    if (userError || !userData?.user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    const userId = claimsData.claims.sub as string;
+    const userId = userData.user.id;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ── Apify Token ──
@@ -213,7 +223,7 @@ Deno.serve(async (req) => {
 
     console.log(`[apify-check] raw=${items.length} deduped=${leads.length} elapsed=${Date.now() - start}ms`);
 
-    // ── Insert leads ──
+    // ── Insert leads (upsert to avoid duplicates) ──
     if (leads.length > 0) {
       const rows = leads.map(l => ({
         job_id: jobId,
