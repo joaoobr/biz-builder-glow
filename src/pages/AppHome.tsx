@@ -123,7 +123,7 @@ const AppHome = () => {
             <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
               <Zap className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="text-lg font-bold font-heading hidden sm:inline">Lead Builder Local</span>
+            <span className="text-lg font-bold font-heading hidden sm:inline">GeoLeads AI</span>
           </div>
 
           <div className="flex items-center gap-2">

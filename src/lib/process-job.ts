@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
 const SUPABASE_URL = 'https://nkgzwuvdxxfpyaotdlsf.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5rZ3p3dXZkeHhmcHlhb3RkbHNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4ODczNTgsImV4cCI6MjA4NzQ2MzM1OH0.v7ioBYk7qKqP-fmWF_YogzBdZyfD5JJCTp3mZkJ6jFQ';
-const USER_AGENT = 'LeadBuilderLocal/1.0 (contact: joao@email.com)';
+const USER_AGENT = 'GeoLeadsAI/1.0 (contact: joao@email.com)';
 const PAGE_SIZE = 50;
 const RATE_LIMIT_MS = 1100;
 const GOOGLE_RATE_LIMIT_MS = 200; // Google allows higher rate
