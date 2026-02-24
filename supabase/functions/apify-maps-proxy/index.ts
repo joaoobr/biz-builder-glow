@@ -6,7 +6,7 @@ const corsHeaders = {
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const ACTOR_ID = 'compass/crawler-google-places';
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 180_000;
 const MAX_RETRIES = 2;
 const BACKOFF = [2000, 5000];
 
@@ -42,7 +42,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}): Promise<R
       clearTimeout(timer);
       if (attempt === MAX_RETRIES)
         throw new Error(
-          `Failed after ${MAX_RETRIES + 1} attempts: ${err.name === 'AbortError' ? 'timeout 30s' : err.message}`,
+          `Failed after ${MAX_RETRIES + 1} attempts: ${err.name === 'AbortError' ? 'timeout 180s' : err.message}`,
         );
       await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
     }
