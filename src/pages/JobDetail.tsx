@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3, RefreshCw, Search, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3, RefreshCw, Search } from 'lucide-react';
 import { insertFakeLeads } from '@/lib/fake-data';
 import { Lead, exportLeadsToCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
@@ -327,24 +326,8 @@ const JobDetail = () => {
                   })}
                 </div>
 
-                {/* Active job progress indicator */}
-                {isJobActive && (
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                      <span className="text-sm font-medium text-primary">
-                        {job.status === 'queued' ? 'Aguardando início...' : 'Pesquisando...'}
-                      </span>
-                    </div>
-                    <Progress value={progressStep * 20} className="h-2" />
-                    {job.progress_message && (
-                      <p className="text-xs text-muted-foreground">{job.progress_message}</p>
-                    )}
-                  </div>
-                )}
-
-                {/* Done/failed message */}
-                {!isJobActive && job.progress_message && (
+                {/* Status message */}
+                {job.progress_message && (
                   <p className="text-sm text-muted-foreground mt-3">{job.progress_message}</p>
                 )}
 
