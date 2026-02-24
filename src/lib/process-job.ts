@@ -269,6 +269,13 @@ export async function processJobApifyMaps(
       }
 
       if (status === 'done') {
+        // Ensure the final progress message isn't overwritten by a stale client update
+        await updateJob(jobId, {
+          status: 'done',
+          progress_step: 5,
+          progress_message: `Concluído — ${checkData.count || 0} leads encontrados via Apify`,
+          finished_at: new Date().toISOString(),
+        });
         return { success: true, count: checkData.count || 0 };
       }
 
@@ -343,6 +350,12 @@ export async function resumeJobApifyMaps(
       }
 
       if (status === 'done') {
+        await updateJob(jobId, {
+          status: 'done',
+          progress_step: 5,
+          progress_message: `Concluído — ${checkData.count || 0} leads encontrados via Apify`,
+          finished_at: new Date().toISOString(),
+        });
         return { success: true, count: checkData.count || 0 };
       }
 
