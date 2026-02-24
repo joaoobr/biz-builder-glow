@@ -237,7 +237,6 @@ Deno.serve(async (req) => {
         city: l.city,
         state: l.state,
         country_code: l.country_code,
-        category_name: l.category_name,
         source: 'APIFY',
         status: 'found',
       }));
