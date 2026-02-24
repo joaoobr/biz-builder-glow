@@ -41,11 +41,22 @@ const JobDetail = () => {
 
   // Auto-poll when job is running/processing
   const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const prevStatusRef = useRef<string | null>(null);
   const isJobActive = job?.status === 'running' || job?.status === 'processing' || job?.status === 'queued';
 
   useEffect(() => {
     fetchData();
   }, [user, id]);
+
+  // Track status changes — when job transitions to done/failed, force a final refetch
+  useEffect(() => {
+    if (job?.status && prevStatusRef.current && prevStatusRef.current !== job.status) {
+      if (job.status === 'done' || job.status === 'failed') {
+        fetchData(); // ensure leads + job are fully synced
+      }
+    }
+    prevStatusRef.current = job?.status || null;
+  }, [job?.status]);
 
   useEffect(() => {
     if (!isJobActive || !id || !user) {
@@ -71,6 +82,25 @@ const JobDetail = () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [isJobActive, id, user]);
+
+  // Safety net: if leads exist but job still shows running for >10s, force a status check
+  useEffect(() => {
+    if (!isJobActive || leads.length === 0 || !id || !user) return;
+    
+    const safetyTimer = setTimeout(async () => {
+      const { data: freshJob } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
+      if (freshJob && (freshJob.status === 'done' || freshJob.status === 'failed')) {
+        setJob(freshJob);
+      }
+    }, 5000);
+
+    return () => clearTimeout(safetyTimer);
+  }, [leads.length, isJobActive, id, user]);
 
   if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
   if (!user) return <Navigate to="/login" replace />;
