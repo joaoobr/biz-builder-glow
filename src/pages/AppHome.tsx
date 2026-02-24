@@ -4,12 +4,15 @@ import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { useCredits } from '@/hooks/useCredits';
+import { useAdmin } from '@/hooks/useAdmin';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, LogOut, History, Settings, Zap, Users, Globe, Mail, UserCheck, BarChart3 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, LogOut, History, Settings, Zap, Users, Globe, Mail, UserCheck, BarChart3, Shield, CreditCard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { processJob, processJobApifyMaps } from '@/lib/process-job';
 
@@ -18,6 +21,8 @@ const AppHome = () => {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { credits, remaining, refetch: refetchCredits } = useCredits();
+  const { isAdmin } = useAdmin();
   const [creating, setCreating] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
@@ -52,6 +57,10 @@ const AppHome = () => {
   const handleCreate = async () => {
     if (!form.business_type || !form.location) {
       toast({ title: 'Preencha os campos obrigatórios', variant: 'destructive' });
+      return;
+    }
+    if (remaining <= 0) {
+      toast({ title: 'Créditos esgotados', description: 'Você não tem créditos suficientes. Entre em contato para upgrade.', variant: 'destructive' });
       return;
     }
     setCreating(true);
@@ -99,8 +108,19 @@ const AppHome = () => {
       }
       clearInterval(pollInterval);
 
-      if (result.success) {
-        toast({ title: `Concluído! ${result.count} leads encontrados.` });
+      if (result.success && result.count) {
+        // Consume credits based on leads found
+        await supabase
+          .from('user_credits')
+          .update({
+            credits_used: (credits?.credits_used || 0) + result.count,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id);
+        refetchCredits();
+        toast({ title: `Concluído! ${result.count} leads encontrados. (${result.count} créditos consumidos)` });
+      } else if (result.success) {
+        toast({ title: 'Concluído!' });
       } else {
         toast({ title: 'Erro no processamento', description: result.error, variant: 'destructive' });
       }
@@ -129,6 +149,11 @@ const AppHome = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/admin"><Shield className="h-4 w-4 mr-1.5" />Admin</Link>
+              </Button>
+            )}
             <Button variant="ghost" size="sm" asChild>
               <Link to="/jobs"><History className="h-4 w-4 mr-1.5" />Jobs</Link>
             </Button>
@@ -149,6 +174,19 @@ const AppHome = () => {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8">
+        {/* Credits indicator */}
+        {credits && (
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">
+              Créditos: <strong className="text-foreground">{remaining}</strong> / {credits.credits_total}
+            </span>
+            <Badge variant={credits.plan_name === 'free' ? 'secondary' : 'default'} className="text-xs">
+              {credits.plan_name}
+            </Badge>
+          </div>
+        )}
+
         {/* New Job Card */}
         <Card className="border-primary/20 bg-gradient-to-br from-card to-secondary/30">
           <CardHeader>
