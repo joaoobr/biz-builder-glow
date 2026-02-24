@@ -5,6 +5,9 @@ export interface Lead {
   address: string;
   phone: string;
   website: string;
+  website_url: string | null;
+  website_source: string | null;
+  website_confidence: number | null;
   rating: number | null;
   reviews_count: number | null;
   decision_maker_name: string | null;

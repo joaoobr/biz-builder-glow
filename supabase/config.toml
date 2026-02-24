@@ -6,3 +6,6 @@ verify_jwt = false
 
 [functions.apify-maps-check]
 verify_jwt = false
+
+[functions.website-enrich]
+verify_jwt = false
