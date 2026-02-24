@@ -6,7 +6,7 @@ const corsHeaders = {
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const ACTOR_ID = 'compass/crawler-google-places';
-const FETCH_TIMEOUT_MS = 8_000; // 8s hard limit
+const FETCH_TIMEOUT_MS = 8_000;
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -33,16 +33,15 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    const userId = claimsData.claims.sub as string;
+    const userId = userData.user.id;
 
     // ── Apify Token ──
     const apifyToken = Deno.env.get('APIFY_TOKEN');
@@ -53,31 +52,29 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Parse body ──
+    // ── Parse body & validate ──
     const body = await req.json();
     const jobId = (body.jobId || '').trim();
-    const businessType = (body.businessType || body.query || '').trim();
+    const query = (body.query || body.businessType || '').trim();
     let location = (body.location || '').replaceAll('/', ', ').trim();
-    const maxResults = Math.min(body.maxResults ?? body.limit ?? 20, 100);
+    const limit = Math.min(Math.max(body.limit ?? body.maxResults ?? 20, 1), 100);
+    const radiusKm = body.radiusKm ?? body.radius_km ?? 0;
 
-    if (!businessType) {
+    // Validation
+    const missing: string[] = [];
+    if (!query) missing.push('query');
+    if (!location) missing.push('location');
+    if (missing.length > 0) {
       return new Response(
-        JSON.stringify({ error: 'businessType é obrigatório' }),
+        JSON.stringify({ error: 'validation_error', missing, message: `Campos obrigatórios faltando: ${missing.join(', ')}` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    if (!location) {
+    // Guard: location must not equal query
+    if (location.toLowerCase() === query.toLowerCase()) {
       return new Response(
-        JSON.stringify({ error: 'location é obrigatória' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // Guard: location must not equal businessType
-    if (location.toLowerCase() === businessType.toLowerCase()) {
-      return new Response(
-        JSON.stringify({ error: `Localidade inválida: "${location}" é igual ao tipo de negócio. Informe cidade/estado.` }),
+        JSON.stringify({ error: 'validation_error', message: `Localidade inválida: "${location}" é igual ao tipo de negócio. Informe cidade/estado.` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -88,16 +85,14 @@ Deno.serve(async (req) => {
     }
 
     // ── Build actor input ──
-    // searchStringsArray = [businessType] (what to search)
-    // locationQuery = location (where to search) — NEVER businessType
-    const actorInput = {
-      searchStringsArray: [businessType],
+    const actorInput: Record<string, unknown> = {
+      searchStringsArray: [query],
       locationQuery: location,
-      maxCrawledPlacesPerSearch: maxResults,
-      language: 'pt',
+      maxCrawledPlacesPerSearch: limit,
+      language: 'pt-BR',
     };
 
-    console.log(`[apify-proxy] user=${userId} jobId=${jobId} input=${JSON.stringify(actorInput)} elapsed=${Date.now() - start}ms`);
+    console.log(`[apify-proxy] user=${userId} jobId=${jobId} query="${query}" location="${location}" limit=${limit} radiusKm=${radiusKm} elapsed=${Date.now() - start}ms`);
 
     // ── Start Actor Run (waitForFinish=0) ──
     const controller = new AbortController();
@@ -134,7 +129,7 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ runId, status: 'processing' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { status: 202, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err: any) {
     const msg = err.name === 'AbortError' ? 'Timeout (8s) ao iniciar run no Apify' : err.message;

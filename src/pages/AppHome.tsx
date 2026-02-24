@@ -88,6 +88,9 @@ const AppHome = () => {
         }
       }, 1500);
 
+      // Navigate to job detail immediately so user can see progress
+      navigate(`/jobs/${data.id}`);
+
       let result: { success: boolean; count?: number; error?: string };
       if (form.source === 'Apify') {
         result = await processJobApifyMaps(data.id, form.business_type, form.location, form.quantity, user.id);
@@ -98,7 +101,6 @@ const AppHome = () => {
 
       if (result.success) {
         toast({ title: `Concluído! ${result.count} leads encontrados.` });
-        await fetchLeads(data.id);
       } else {
         toast({ title: 'Erro no processamento', description: result.error, variant: 'destructive' });
       }
