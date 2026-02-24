@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3, Search } from 'lucide-react';
-import { insertFakeLeads } from '@/lib/fake-data';
+import { ArrowLeft, Download, Users, Globe, Mail, UserCheck, BarChart3, Search } from 'lucide-react';
 import { Lead, exportLeadsToCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { resumeJobApifyMaps } from '@/lib/process-job';
@@ -22,7 +21,6 @@ const JobDetail = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [search, setSearch] = useState('');
   const [loadingData, setLoadingData] = useState(true);
-  const [inserting, setInserting] = useState(false);
   const [enrichingWebsite, setEnrichingWebsite] = useState(false);
   const [enrichingDecisionMaker, setEnrichingDecisionMaker] = useState(false);
 
@@ -103,19 +101,6 @@ const JobDetail = () => {
   if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
   if (!user) return <Navigate to="/login" replace />;
 
-  const handleFakeData = async () => {
-    if (!id) return;
-    setInserting(true);
-    try {
-      await insertFakeLeads(id);
-      toast({ title: 'Dados de exemplo inseridos!' });
-      await fetchData();
-    } catch (e: any) {
-      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
-    } finally {
-      setInserting(false);
-    }
-  };
 
   const handleExport = () => {
     if (leads.length === 0) {
@@ -248,10 +233,6 @@ const JobDetail = () => {
             <span className="text-sm text-muted-foreground ml-2">{job?.location_text}</span>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleFakeData} disabled={inserting || leads.length > 0}>
-              <Database className="h-4 w-4 mr-1.5" />
-              {inserting ? 'Inserindo...' : 'Dados de Exemplo'}
-            </Button>
             <Button size="sm" onClick={handleExport} disabled={leads.length === 0}>
               <Download className="h-4 w-4 mr-1.5" />
               Exportar CSV
@@ -289,14 +270,14 @@ const JobDetail = () => {
                   })}
                 </div>
 
-                {/* Status message */}
-                {job.progress_message && (
+                {/* Status message - hide when leads already loaded */}
+                {job.progress_message && leads.length === 0 && isJobActive && (
                   <p className="text-sm text-muted-foreground mt-3">{job.progress_message}</p>
                 )}
 
                 <div className="mt-3 flex items-center gap-2">
                   <Badge className={job.status === 'done' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-destructive/20 text-destructive' : job.status === 'processing' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-primary/20 text-primary'}>
-                    {job.status === 'done' ? '✓ Concluído' : job.status === 'failed' ? '✗ Falhou' : job.status === 'running' ? '⟳ Buscando...' : job.status}
+                    {job.status === 'done' ? '✓ Concluído' : job.status === 'failed' ? '✗ Falhou' : (job.status === 'running' || job.status === 'processing') && leads.length > 0 ? '✓ Concluído' : job.status === 'running' ? '⟳ Buscando...' : job.status}
                   </Badge>
                   {leads.length > 0 && progressStep >= 1 && (
                     <Button

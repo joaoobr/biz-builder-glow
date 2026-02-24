@@ -45,14 +45,15 @@ const Jobs = () => {
 
   useEffect(() => {
     fetchJobs();
-    // Poll every 3s if any job is active
-    const interval = setInterval(() => {
-      if (jobs.some(j => j.status === 'running' || j.status === 'processing' || j.status === 'queued')) {
-        fetchJobs();
-      }
-    }, 3000);
+  }, [user]);
+
+  // Poll every 3s if any job is active
+  useEffect(() => {
+    const hasActive = jobs.some(j => j.status === 'running' || j.status === 'processing' || j.status === 'queued');
+    if (!hasActive) return;
+    const interval = setInterval(fetchJobs, 3000);
     return () => clearInterval(interval);
-  }, [user, jobs.length]);
+  }, [jobs]);
 
   if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
   if (!user) return <Navigate to="/login" replace />;
