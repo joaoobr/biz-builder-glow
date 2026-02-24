@@ -1,8 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
-const GOOGLE_PLACES_TEXT_SEARCH = 'https://maps.googleapis.com/maps/api/place/textsearch/json';
-const GOOGLE_PLACES_DETAILS = 'https://maps.googleapis.com/maps/api/place/details/json';
+const SUPABASE_URL = 'https://nkgzwuvdxxfpyaotdlsf.supabase.co';
 const USER_AGENT = 'LeadBuilderLocal/1.0 (contact: joao@email.com)';
 const PAGE_SIZE = 50;
 const RATE_LIMIT_MS = 1100;
@@ -15,12 +14,21 @@ function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchWithRetry(url: string, headers: Record<string, string> = {}): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  headers: Record<string, string> = {},
+  body?: string,
+): Promise<Response> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      const res = await fetch(url, { headers, signal: controller.signal });
+      const res = await fetch(url, {
+        method: body ? 'POST' : 'GET',
+        headers,
+        body,
+        signal: controller.signal,
+      });
       clearTimeout(timer);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res;
@@ -159,15 +167,32 @@ interface GooglePlaceDetailsResponse {
   error_message?: string;
 }
 
+async function callProxy(action: string, params: Record<string, string>): Promise<any> {
+  const session = (await supabase.auth.getSession()).data.session;
+  if (!session) throw new Error('Usuário não autenticado');
+
+  const res = await fetchWithRetry(
+    `${SUPABASE_URL}/functions/v1/google-places-proxy`,
+    {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    JSON.stringify({ action, ...params }),
+  );
+
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
 export async function processJobGooglePlaces(
   jobId: string,
   businessType: string,
   locationText: string,
   quantity: number,
-  apiKey: string,
 ) {
   try {
-    // Step 1 – Text Search
+    // Step 1 – Text Search via proxy
     await updateJob(jobId, {
       status: 'running',
       progress_step: 1,
@@ -178,21 +203,12 @@ export async function processJobGooglePlaces(
     let nextPageToken: string | undefined;
 
     while (allPlaces.length < quantity) {
-      const params = new URLSearchParams({
+      const params: Record<string, string> = {
         query: `${businessType} in ${locationText}`,
-        key: apiKey,
-      });
-      if (nextPageToken) {
-        params.set('pagetoken', nextPageToken);
-      }
+      };
+      if (nextPageToken) params.pagetoken = nextPageToken;
 
-      const url = `${GOOGLE_PLACES_TEXT_SEARCH}?${params.toString()}`;
-      const res = await fetchWithRetry(url);
-      const data: GoogleTextSearchResponse = await res.json();
-
-      if (data.status === 'REQUEST_DENIED' || data.status === 'INVALID_REQUEST') {
-        throw new Error(`Google API: ${data.status} — ${data.error_message || 'Verifique sua API Key'}`);
-      }
+      const data: GoogleTextSearchResponse = await callProxy('textsearch', params);
 
       if (data.status === 'ZERO_RESULTS' || !data.results?.length) break;
 
@@ -200,8 +216,6 @@ export async function processJobGooglePlaces(
       nextPageToken = data.next_page_token;
 
       if (!nextPageToken) break;
-
-      // Google requires ~2s delay before using next_page_token
       await delay(2000);
     }
 
@@ -215,7 +229,7 @@ export async function processJobGooglePlaces(
       return { success: false, error: 'Nenhum resultado encontrado' };
     }
 
-    // Step 2 – Place Details for each result
+    // Step 2 – Place Details via proxy
     await updateJob(jobId, {
       progress_step: 2,
       progress_message: `Enriquecendo ${places.length} lugares via Place Details...`,
@@ -225,10 +239,8 @@ export async function processJobGooglePlaces(
 
     for (let i = 0; i < places.length; i++) {
       const place = places[i];
-
       if (i > 0) await delay(GOOGLE_RATE_LIMIT_MS);
 
-      // Update progress every 10 items
       if (i % 10 === 0 && i > 0) {
         await updateJob(jobId, {
           progress_message: `Detalhes: ${i}/${places.length} processados...`,
@@ -236,14 +248,9 @@ export async function processJobGooglePlaces(
       }
 
       try {
-        const detailParams = new URLSearchParams({
+        const detail: GooglePlaceDetailsResponse = await callProxy('details', {
           place_id: place.place_id,
-          fields: 'name,formatted_address,international_phone_number,website,rating,user_ratings_total',
-          key: apiKey,
         });
-
-        const detailRes = await fetchWithRetry(`${GOOGLE_PLACES_DETAILS}?${detailParams.toString()}`);
-        const detail: GooglePlaceDetailsResponse = await detailRes.json();
 
         if (detail.status === 'OK' && detail.result) {
           const r = detail.result;
@@ -258,7 +265,6 @@ export async function processJobGooglePlaces(
             source: 'GOOGLE',
           });
         } else {
-          // Fallback: insert basic info from text search
           leadRows.push({
             job_id: jobId,
             name: place.name,
@@ -267,7 +273,6 @@ export async function processJobGooglePlaces(
           });
         }
       } catch {
-        // If details fail, still insert basic info
         leadRows.push({
           job_id: jobId,
           name: place.name,
@@ -284,7 +289,6 @@ export async function processJobGooglePlaces(
     });
 
     if (leadRows.length > 0) {
-      // Insert in batches of 100
       for (let i = 0; i < leadRows.length; i += 100) {
         const batch = leadRows.slice(i, i + 100);
         const { error } = await supabase.from('leads').insert(batch);
