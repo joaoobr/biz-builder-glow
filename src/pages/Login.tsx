@@ -26,7 +26,7 @@ const Login = () => {
             <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
               <Zap className="h-5 w-5 text-primary-foreground" />
             </div>
-            <h1 className="text-2xl font-bold font-heading">Lead Builder Local</h1>
+            <h1 className="text-2xl font-bold font-heading">GeoLeads AI</h1>
           </div>
         </div>
         <div className="relative z-10 space-y-8">
@@ -48,7 +48,7 @@ const Login = () => {
           </div>
         </div>
         <div className="relative z-10 text-xs text-muted-foreground">
-          © 2026 Lead Builder Local
+          © 2026 GeoLeads AI
         </div>
       </div>
 
@@ -59,7 +59,7 @@ const Login = () => {
             <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
               <Zap className="h-5 w-5 text-primary-foreground" />
             </div>
-            <h1 className="text-2xl font-bold font-heading">Lead Builder Local</h1>
+            <h1 className="text-2xl font-bold font-heading">GeoLeads AI</h1>
           </div>
 
           <div className="space-y-2">
