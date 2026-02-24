@@ -30,7 +30,7 @@ const Jobs = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [fetching, setFetching] = useState(true);
 
-  useEffect(() => {
+  const fetchJobs = () => {
     if (!user) return;
     supabase
       .from('jobs')
@@ -41,7 +41,18 @@ const Jobs = () => {
         setJobs((data as Job[]) || []);
         setFetching(false);
       });
-  }, [user]);
+  };
+
+  useEffect(() => {
+    fetchJobs();
+    // Poll every 3s if any job is active
+    const interval = setInterval(() => {
+      if (jobs.some(j => j.status === 'running' || j.status === 'processing' || j.status === 'queued')) {
+        fetchJobs();
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [user, jobs.length]);
 
   if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
   if (!user) return <Navigate to="/login" replace />;

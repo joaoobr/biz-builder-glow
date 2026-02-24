@@ -1,12 +1,13 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate, Link, useParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3, RefreshCw, Search } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3, RefreshCw, Search, Loader2 } from 'lucide-react';
 import { insertFakeLeads } from '@/lib/fake-data';
 import { Lead, exportLeadsToCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
@@ -38,7 +39,38 @@ const JobDetail = () => {
     setLoadingData(false);
   };
 
-  useEffect(() => { fetchData(); }, [user, id]);
+  // Auto-poll when job is running/processing
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const isJobActive = job?.status === 'running' || job?.status === 'processing' || job?.status === 'queued';
+
+  useEffect(() => {
+    fetchData();
+  }, [user, id]);
+
+  useEffect(() => {
+    if (!isJobActive || !id || !user) {
+      if (pollRef.current) clearInterval(pollRef.current);
+      return;
+    }
+
+    pollRef.current = setInterval(async () => {
+      const [jobRes, leadsRes] = await Promise.all([
+        supabase.from('jobs').select('*').eq('id', id).eq('user_id', user.id).single(),
+        supabase.from('leads').select('*').eq('job_id', id).order('created_at'),
+      ]);
+      if (jobRes.data) setJob(jobRes.data);
+      if (leadsRes.data) setLeads(leadsRes.data as Lead[]);
+
+      // Stop polling when done
+      if (jobRes.data?.status === 'done' || jobRes.data?.status === 'failed') {
+        if (pollRef.current) clearInterval(pollRef.current);
+      }
+    }, 2000);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [isJobActive, id, user]);
 
   if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
   if (!user) return <Navigate to="/login" replace />;
@@ -250,7 +282,7 @@ const JobDetail = () => {
                   {steps.map((step, i) => {
                     const stepNum = i + 1;
                     const isDone = progressStep >= stepNum;
-                    const isCurrent = progressStep === stepNum - 1 && job.status === 'running';
+                    const isCurrent = progressStep === stepNum - 1 && isJobActive;
                     return (
                       <div key={step} className="flex items-center gap-2">
                         <div className={`flex items-center gap-2 rounded-lg px-3 py-2 ${isDone ? 'bg-green-500/10' : isCurrent ? 'bg-primary/10' : 'bg-secondary'}`}>
@@ -264,19 +296,38 @@ const JobDetail = () => {
                     );
                   })}
                 </div>
-                {job.progress_message && (
+
+                {/* Active job progress indicator */}
+                {isJobActive && (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      <span className="text-sm font-medium text-primary">
+                        {job.status === 'queued' ? 'Aguardando início...' : 'Pesquisando...'}
+                      </span>
+                    </div>
+                    <Progress value={progressStep * 20} className="h-2" />
+                    {job.progress_message && (
+                      <p className="text-xs text-muted-foreground">{job.progress_message}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Done/failed message */}
+                {!isJobActive && job.progress_message && (
                   <p className="text-sm text-muted-foreground mt-3">{job.progress_message}</p>
                 )}
+
                 <div className="mt-3 flex items-center gap-2">
                   <Badge className={job.status === 'done' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-destructive/20 text-destructive' : job.status === 'processing' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-primary/20 text-primary'}>
-                    {job.status}
+                    {job.status === 'done' ? '✓ Concluído' : job.status === 'failed' ? '✗ Falhou' : job.status === 'running' ? '⟳ Buscando...' : job.status}
                   </Badge>
                   {leads.length > 0 && progressStep >= 1 && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleEnrichWebsite}
-                      disabled={enrichingWebsite || job.status === 'running'}
+                      disabled={enrichingWebsite || isJobActive}
                     >
                       <Search className={`h-4 w-4 mr-1.5 ${enrichingWebsite ? 'animate-pulse' : ''}`} />
                       {enrichingWebsite ? 'Buscando sites...' : '2. Encontrar Site'}
@@ -287,7 +338,7 @@ const JobDetail = () => {
                       variant="outline"
                       size="sm"
                       onClick={handleEnrichDecisionMaker}
-                      disabled={enrichingDecisionMaker || job.status === 'running'}
+                      disabled={enrichingDecisionMaker || isJobActive}
                     >
                       <UserCheck className={`h-4 w-4 mr-1.5 ${enrichingDecisionMaker ? 'animate-pulse' : ''}`} />
                       {enrichingDecisionMaker ? 'Pesquisando decisores...' : '3. Pesquisar Decisor'}
