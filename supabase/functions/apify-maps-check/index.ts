@@ -235,7 +235,6 @@ Deno.serve(async (req) => {
         rating: l.rating,
         reviews_count: l.reviews_count,
         source: 'APIFY',
-        status: 'found',
       }));
 
       for (let i = 0; i < rows.length; i += 100) {
