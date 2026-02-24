@@ -169,9 +169,41 @@ export async function processJobApifyMaps(
     const accessToken = sessionData?.session?.access_token;
     const headers = getAuthHeaders(accessToken);
 
+    // ── Validate inputs ──
+    const trimmedLocation = locationText.trim();
+    const trimmedBusiness = businessType.trim();
+
+    if (!trimmedLocation) {
+      await updateJob(jobId, {
+        status: 'failed',
+        progress_message: 'Localidade não informada. Preencha o campo de localidade.',
+      });
+      return { success: false, error: 'Localidade não informada' };
+    }
+
+    if (trimmedLocation.toLowerCase() === trimmedBusiness.toLowerCase()) {
+      console.error(`[processJobApifyMaps] locationQuery === businessType ("${trimmedLocation}"). Abortando.`);
+      await updateJob(jobId, {
+        status: 'failed',
+        progress_message: `Localidade inválida: "${trimmedLocation}" é igual ao tipo de negócio. Informe cidade/estado.`,
+      });
+      return { success: false, error: 'Localidade inválida (igual ao tipo de negócio)' };
+    }
+
+    // Build the correct payload
+    const apifyPayload = {
+      query: trimmedBusiness,
+      location: trimmedLocation,
+      limit: quantity,
+    };
+
+    await updateJob(jobId, {
+      progress_message: `Iniciando Apify — query="${trimmedBusiness}" location="${trimmedLocation}" limit=${quantity}`,
+    });
+
     // Step 1: Start the Apify run (returns immediately)
     const { data: startData, error: startError } = await supabase.functions.invoke('apify-maps-proxy', {
-      body: { query: businessType, location: locationText, limit: quantity },
+      body: apifyPayload,
       headers,
     });
 
