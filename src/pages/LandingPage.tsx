@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/contexts/AuthContext';
 import { Zap, ArrowRight, MapPin, Target, TrendingUp, CheckCircle2, Star, Users, Mail, Globe, Shield, CreditCard } from 'lucide-react';
 import heroBg from '@/assets/hero-bg-v2.jpg';
 import logoIcon from '@/assets/logo-icon.png';
@@ -64,6 +65,18 @@ const stats = [
 ];
 
 const LandingPage = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (user) return <Navigate to="/app" replace />;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navbar */}
