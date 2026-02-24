@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Plus, LogOut, History, Settings, Zap, Users, Globe, Mail, UserCheck, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { processJob, processJobGooglePlaces } from '@/lib/process-job';
+import { processJob, processJobApify } from '@/lib/process-job';
 
 
 const AppHome = () => {
@@ -89,8 +89,8 @@ const AppHome = () => {
       }, 1500);
 
       let result: { success: boolean; count?: number; error?: string };
-      if (form.source === 'Google Places') {
-        result = await processJobGooglePlaces(data.id, form.business_type, form.location, form.quantity);
+      if (form.source === 'Apify') {
+        result = await processJobApify(data.id, form.business_type, form.location, form.quantity);
       } else {
         result = await processJob(data.id, form.business_type, form.location, form.quantity);
       }
@@ -201,7 +201,8 @@ const AppHome = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="OSM">OSM (grátis)</SelectItem>
-                    <SelectItem value="Google Places">Google Places (robusto)</SelectItem>
+                    <SelectItem value="Apify">Apify (robusto)</SelectItem>
+                    <SelectItem value="Google Places" disabled>Google Places (em breve) 🔒</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
