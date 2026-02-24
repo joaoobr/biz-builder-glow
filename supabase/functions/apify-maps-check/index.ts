@@ -234,9 +234,6 @@ Deno.serve(async (req) => {
         website: l.website,
         rating: l.rating,
         reviews_count: l.reviews_count,
-        city: l.city,
-        state: l.state,
-        country_code: l.country_code,
         source: 'APIFY',
         status: 'found',
       }));
