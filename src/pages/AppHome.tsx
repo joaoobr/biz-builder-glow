@@ -1,6 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -12,10 +12,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, LogOut, History, Settings, Zap, Users, Globe, Mail, UserCheck, BarChart3, Shield, CreditCard } from 'lucide-react';
+import { Plus, LogOut, History, Settings, Zap, Shield, CreditCard, ArrowRight, MapPin, Target, TrendingUp, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { processJob, processJobApifyMaps } from '@/lib/process-job';
-
+import { motion } from 'framer-motion';
+import MetricsBar from '@/components/MetricsBar';
+import LeadsTable from '@/components/LeadsTable';
+import heroBg from '@/assets/hero-bg.jpg';
 
 const AppHome = () => {
   const { user, loading, signOut } = useAuth();
@@ -27,6 +30,7 @@ const AppHome = () => {
   const [processing, setProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [leads, setLeads] = useState<any[]>([]);
+  const [showNewJob, setShowNewJob] = useState(false);
   const [form, setForm] = useState({
     business_type: '',
     location: '',
@@ -46,7 +50,7 @@ const AppHome = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     );
@@ -80,11 +84,9 @@ const AppHome = () => {
       toast({ title: 'Job criado! Processando...' });
       setCreating(false);
 
-      // Process job client-side
       setProcessing(true);
       setProgressMsg('Iniciando processamento...');
 
-      // Poll job status for progress updates
       const pollInterval = setInterval(async () => {
         const { data: job } = await supabase
           .from('jobs')
@@ -97,7 +99,6 @@ const AppHome = () => {
         }
       }, 1500);
 
-      // Navigate to job detail immediately so user can see progress
       navigate(`/jobs/${data.id}`);
 
       let result: { success: boolean; count?: number; error?: string };
@@ -109,7 +110,6 @@ const AppHome = () => {
       clearInterval(pollInterval);
 
       if (result.success && result.count) {
-        // Consume credits based on leads found
         await supabase
           .from('user_credits')
           .update({
@@ -135,6 +135,12 @@ const AppHome = () => {
 
   const avatarUrl = user.user_metadata?.avatar_url;
   const displayName = user.user_metadata?.full_name || user.email;
+
+  const features = [
+    { icon: MapPin, title: 'Busca Geolocalizada', desc: 'Encontre empresas em qualquer região do Brasil com dados do Google Maps' },
+    { icon: Target, title: 'Decisor Identificado', desc: 'IA encontra nome, cargo e LinkedIn do tomador de decisão' },
+    { icon: TrendingUp, title: 'Enriquecimento Total', desc: 'Site, e-mail, telefone e avaliações — tudo em uma planilha pronta' },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -173,87 +179,159 @@ const AppHome = () => {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8">
-        {/* Credits indicator */}
-        {credits && (
-          <div className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">
-              Créditos: <strong className="text-foreground">{remaining}</strong> / {credits.credits_total}
-            </span>
-            <Badge variant={credits.plan_name === 'free' ? 'secondary' : 'default'} className="text-xs">
-              {credits.plan_name}
-            </Badge>
-          </div>
-        )}
+      {/* Hero Section */}
+      <section className="relative overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${heroBg})` }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
 
-        {/* New Job Card */}
-        <Card className="border-primary/20 bg-gradient-to-br from-card to-secondary/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <Plus className="h-5 w-5 text-primary" />
-              Novo Job
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Tipo de Negócio *</Label>
-                <Input
-                  placeholder="ex: Restaurantes, Dentistas..."
-                  value={form.business_type}
-                  onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Localidade *</Label>
-                <Input
-                  placeholder="ex: São Paulo - SP"
-                  value={form.location}
-                  onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Quantidade</Label>
-                <Input
-                  type="number"
-                  min={10}
-                  max={5000}
-                  value={form.quantity}
-                  onChange={e => setForm(f => ({ ...f, quantity: parseInt(e.target.value) || 100 }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Raio (km)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={form.radius_km}
-                  onChange={e => setForm(f => ({ ...f, radius_km: parseInt(e.target.value) || 10 }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Fonte</Label>
-                <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="OSM">OSM (grátis)</SelectItem>
-                    <SelectItem value="Apify">Apify (Google Maps)</SelectItem>
-                    <SelectItem value="Google Places" disabled>Google Places (em breve) 🔒</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-end">
-                <Button onClick={handleCreate} disabled={creating || processing} size="lg" className="w-full h-10">
-                  {creating ? 'Criando...' : processing ? 'Processando...' : 'Criar Job'}
-                </Button>
-              </div>
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="max-w-2xl"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              {credits && (
+                <Badge variant="outline" className="border-primary/40 text-primary bg-primary/5 px-3 py-1">
+                  <CreditCard className="h-3 w-3 mr-1.5" />
+                  {remaining} créditos restantes • {credits.plan_name}
+                </Badge>
+              )}
             </div>
-          </CardContent>
-        </Card>
+
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold font-heading leading-tight tracking-tight">
+              Transforme o mapa em{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-[hsl(var(--success))]">
+                clientes reais
+              </span>
+            </h1>
+
+            <p className="mt-4 text-lg sm:text-xl text-muted-foreground max-w-lg leading-relaxed">
+              Encontre empresas, identifique decisores e obtenha e-mails validados — 
+              tudo automatizado com IA em minutos.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button
+                size="lg"
+                className="h-12 px-8 text-base font-semibold gap-2"
+                onClick={() => setShowNewJob(true)}
+              >
+                <Plus className="h-5 w-5" />
+                Novo Job
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="lg" className="h-12 px-8 text-base" asChild>
+                <Link to="/jobs">
+                  <History className="h-4 w-4 mr-2" />
+                  Ver Meus Jobs
+                </Link>
+              </Button>
+            </div>
+          </motion.div>
+
+          {/* Feature cards */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.3, ease: 'easeOut' }}
+            className="mt-12 grid gap-4 sm:grid-cols-3"
+          >
+            {features.map(({ icon: Icon, title, desc }, i) => (
+              <Card key={title} className="bg-card/60 backdrop-blur-md border-border/50 hover:border-primary/30 transition-colors">
+                <CardContent className="p-5">
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
+                    <Icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <h3 className="font-heading font-semibold text-sm">{title}</h3>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{desc}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8">
+        {/* New Job Form — expandable */}
+        {showNewJob && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            transition={{ duration: 0.3 }}
+          >
+            <Card className="border-primary/20 bg-gradient-to-br from-card to-secondary/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Plus className="h-5 w-5 text-primary" />
+                  Novo Job
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Tipo de Negócio *</Label>
+                    <Input
+                      placeholder="ex: Restaurantes, Dentistas..."
+                      value={form.business_type}
+                      onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Localidade *</Label>
+                    <Input
+                      placeholder="ex: São Paulo - SP"
+                      value={form.location}
+                      onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Quantidade</Label>
+                    <Input
+                      type="number"
+                      min={10}
+                      max={5000}
+                      value={form.quantity}
+                      onChange={e => setForm(f => ({ ...f, quantity: parseInt(e.target.value) || 100 }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Raio (km)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={form.radius_km}
+                      onChange={e => setForm(f => ({ ...f, radius_km: parseInt(e.target.value) || 10 }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Fonte</Label>
+                    <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="OSM">OSM (grátis)</SelectItem>
+                        <SelectItem value="Apify">Apify (Google Maps)</SelectItem>
+                        <SelectItem value="Google Places" disabled>Google Places (em breve) 🔒</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end">
+                    <Button onClick={handleCreate} disabled={creating || processing} size="lg" className="w-full h-10">
+                      {creating ? 'Criando...' : processing ? 'Processando...' : 'Criar Job'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         {/* Progress indicator */}
         {processing && progressMsg && (
@@ -265,31 +343,8 @@ const AppHome = () => {
           </Card>
         )}
 
-        {/* Metrics */}
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
-          {[
-            { label: 'Total Leads', value: leads.length > 0 ? String(leads.length) : '—', icon: Users },
-            { label: 'Com Site', value: leads.filter(l => l.website).length > 0 ? String(leads.filter(l => l.website).length) : '—', icon: Globe },
-            { label: 'Com Email', value: leads.filter(l => l.email).length > 0 ? String(leads.filter(l => l.email).length) : '—', icon: Mail },
-            { label: 'Com Decisor', value: leads.filter(l => l.decision_maker_name).length > 0 ? String(leads.filter(l => l.decision_maker_name).length) : '—', icon: UserCheck },
-            { label: 'Taxa Preench.', value: leads.length > 0 ? `${Math.round((leads.filter(l => l.website || l.email).length / leads.length) * 100)}%` : '—', icon: BarChart3 },
-          ].map(({ label, value, icon: Icon }) => (
-            <Card key={label} className="bg-card">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Icon className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold font-heading">{value}</p>
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Stepper */}
-        <Card>
+        {/* Pipeline Steps */}
+        <Card className="bg-card/60">
           <CardHeader>
             <CardTitle className="text-lg">Pipeline de Enriquecimento</CardTitle>
           </CardHeader>
@@ -310,52 +365,35 @@ const AppHome = () => {
           </CardContent>
         </Card>
 
-        {/* Empty results table */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Resultados</CardTitle>
-            <Input placeholder="Buscar leads..." className="max-w-xs h-9" />
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-lg border border-border overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-secondary/50">
-                    {['Nome', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews', 'Decisor', 'Cargo', 'LinkedIn', 'E-mail', 'Status', 'Fonte'].map(h => (
-                      <th key={h} className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {leads.length === 0 ? (
-                    <tr>
-                      <td colSpan={12} className="px-3 py-12 text-center text-muted-foreground">
-                        Crie um job para ver resultados aqui.
-                      </td>
-                    </tr>
-                  ) : (
-                    leads.map((lead, i) => (
-                      <tr key={lead.id || i} className="border-b border-border hover:bg-secondary/30">
-                        <td className="px-3 py-2 whitespace-nowrap">{lead.name || '—'}</td>
-                        <td className="px-3 py-2 max-w-[200px] truncate">{lead.address || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{lead.phone || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{lead.website || '—'}</td>
-                        <td className="px-3 py-2">{lead.rating || '—'}</td>
-                        <td className="px-3 py-2">{lead.reviews_count || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{lead.decision_maker_name || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{lead.decision_maker_title || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{lead.linkedin_url || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{lead.email || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{lead.email_status || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{lead.source || '—'}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+        <MetricsBar leads={leads} />
+        <LeadsTable leads={leads} />
+
+        {/* Social proof / CTA section */}
+        <section className="rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 p-8 sm:p-10">
+          <div className="max-w-xl">
+            <h2 className="text-2xl font-heading font-bold">
+              Pronto para escalar sua prospecção?
+            </h2>
+            <p className="mt-2 text-muted-foreground">
+              Empresas que usam GeoLeads AI encontram <strong className="text-foreground">3x mais decisores</strong> qualificados 
+              em metade do tempo. Faça upgrade e desbloqueie buscas ilimitadas.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-4 items-center">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
+                5 buscas grátis
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
+                Decisor + E-mail
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
+                Exportação CSV
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </main>
     </div>
   );
