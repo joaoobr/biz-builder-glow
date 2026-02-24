@@ -18,7 +18,8 @@ import { processJob, processJobApifyMaps } from '@/lib/process-job';
 import { motion } from 'framer-motion';
 import MetricsBar from '@/components/MetricsBar';
 import LeadsTable from '@/components/LeadsTable';
-import heroBg from '@/assets/hero-bg.jpg';
+import heroBg from '@/assets/hero-bg-v2.jpg';
+import logoIcon from '@/assets/logo-icon.png';
 
 const AppHome = () => {
   const { user, loading, signOut } = useAuth();
@@ -148,9 +149,7 @@ const AppHome = () => {
       <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
-              <Zap className="h-4 w-4 text-primary-foreground" />
-            </div>
+            <img src={logoIcon} alt="GeoLeads AI" className="h-9 w-9 rounded-lg" />
             <span className="text-lg font-bold font-heading hidden sm:inline">GeoLeads AI</span>
           </div>
 
@@ -180,52 +179,63 @@ const AppHome = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden">
+      <section className="relative overflow-hidden min-h-[520px] flex items-center">
         <div
-          className="absolute inset-0 bg-cover bg-center"
+          className="absolute inset-0 bg-cover bg-center scale-105"
           style={{ backgroundImage: `url(${heroBg})` }}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/70 to-background" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
 
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24 w-full flex flex-col lg:flex-row items-center gap-12">
+          {/* Left: Copy */}
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
-            className="max-w-2xl"
+            initial={{ opacity: 0, x: -40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8, ease: 'easeOut' }}
+            className="max-w-xl flex-1"
           >
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-3 mb-6">
+              <motion.img
+                src={logoIcon}
+                alt="GeoLeads AI"
+                className="h-14 w-14 drop-shadow-[0_0_20px_hsl(var(--primary)/0.5)]"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 200, delay: 0.3 }}
+              />
               {credits && (
                 <Badge variant="outline" className="border-primary/40 text-primary bg-primary/5 px-3 py-1">
                   <CreditCard className="h-3 w-3 mr-1.5" />
-                  {remaining} créditos restantes • {credits.plan_name}
+                  {remaining} créditos • {credits.plan_name}
                 </Badge>
               )}
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold font-heading leading-tight tracking-tight">
-              Transforme o mapa em{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-[hsl(var(--success))]">
-                clientes reais
-              </span>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold font-heading leading-[1.1] tracking-tight">
+              Cada pin no mapa é{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[hsl(38,92%,50%)] via-[hsl(45,93%,60%)] to-[hsl(38,92%,50%)]">
+                dinheiro
+              </span>{' '}
+              esperando por você
             </h1>
 
-            <p className="mt-4 text-lg sm:text-xl text-muted-foreground max-w-lg leading-relaxed">
-              Encontre empresas, identifique decisores e obtenha e-mails validados — 
-              tudo automatizado com IA em minutos.
+            <p className="mt-5 text-lg sm:text-xl text-muted-foreground max-w-lg leading-relaxed">
+              Descubra empresas, identifique o decisor e conquiste o contato direto —{' '}
+              <strong className="text-foreground">tudo em minutos com IA</strong>.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
               <Button
                 size="lg"
-                className="h-12 px-8 text-base font-semibold gap-2"
+                className="h-13 px-10 text-base font-bold gap-2 bg-gradient-to-r from-[hsl(38,92%,50%)] to-[hsl(30,90%,45%)] text-background hover:from-[hsl(38,92%,55%)] hover:to-[hsl(30,90%,50%)] shadow-[0_0_30px_hsl(38,92%,50%,0.3)]"
                 onClick={() => setShowNewJob(true)}
               >
-                <Plus className="h-5 w-5" />
-                Novo Job
+                <Zap className="h-5 w-5" />
+                Começar Agora — É Grátis
                 <ArrowRight className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="lg" className="h-12 px-8 text-base" asChild>
+              <Button variant="outline" size="lg" className="h-13 px-8 text-base border-border/50" asChild>
                 <Link to="/jobs">
                   <History className="h-4 w-4 mr-2" />
                   Ver Meus Jobs
@@ -234,15 +244,38 @@ const AppHome = () => {
             </div>
           </motion.div>
 
-          {/* Feature cards */}
+          {/* Right: Stats teaser */}
           <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.3, ease: 'easeOut' }}
-            className="mt-12 grid gap-4 sm:grid-cols-3"
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
+            className="hidden lg:flex flex-col gap-3 flex-1 max-w-sm"
           >
-            {features.map(({ icon: Icon, title, desc }, i) => (
-              <Card key={title} className="bg-card/60 backdrop-blur-md border-border/50 hover:border-primary/30 transition-colors">
+            {[
+              { number: '50K+', label: 'Leads gerados', color: 'from-primary to-primary' },
+              { number: '85%', label: 'Taxa de e-mail encontrado', color: 'from-[hsl(var(--success))] to-[hsl(142,71%,55%)]' },
+              { number: '3x', label: 'Mais rápido que manual', color: 'from-[hsl(38,92%,50%)] to-[hsl(45,93%,60%)]' },
+            ].map(({ number, label, color }) => (
+              <div key={label} className="rounded-xl bg-card/40 backdrop-blur-lg border border-border/30 p-4 flex items-center gap-4">
+                <span className={`text-2xl font-heading font-bold text-transparent bg-clip-text bg-gradient-to-r ${color}`}>
+                  {number}
+                </span>
+                <span className="text-sm text-muted-foreground">{label}</span>
+              </div>
+            ))}
+          </motion.div>
+        </div>
+
+        {/* Feature cards below hero */}
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 -mt-8 pb-8">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.6, ease: 'easeOut' }}
+            className="grid gap-4 sm:grid-cols-3"
+          >
+            {features.map(({ icon: Icon, title, desc }) => (
+              <Card key={title} className="bg-card/80 backdrop-blur-md border-border/50 hover:border-primary/30 transition-all hover:-translate-y-1 duration-300">
                 <CardContent className="p-5">
                   <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
                     <Icon className="h-5 w-5 text-primary" />
