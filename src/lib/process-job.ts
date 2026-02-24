@@ -139,43 +139,39 @@ export async function processJob(
   }
 }
 
-// ─── Apify ───────────────────────────────────────────────────────────
+// ─── Apify (Google Maps) ─────────────────────────────────────────────
 
-export async function processJobApify(
+export async function processJobApifyMaps(
   jobId: string,
   businessType: string,
   locationText: string,
   quantity: number,
+  userId: string,
 ) {
   try {
     await updateJob(jobId, {
       status: 'running',
       progress_step: 1,
-      progress_message: 'Buscando empresas via Apify...',
+      progress_message: 'Buscando empresas via Apify (Google Maps)...',
     });
 
-    const session = (await supabase.auth.getSession()).data.session;
-    if (!session) throw new Error('Usuário não autenticado');
+    const query = `${businessType} ${locationText}`;
 
     const { data, error } = await supabase.functions.invoke('apify-maps-proxy', {
-      body: {
-        query: businessType,
-        locationText,
-        maxResults: quantity,
-      },
+      body: { query, locationText, maxResults: quantity },
     });
 
     if (error) throw new Error(error.message || 'Erro ao chamar proxy Apify');
     if (data?.error) throw new Error(data.error);
 
-    const leads: any[] = data?.leads || [];
+    const items: any[] = data?.leads || [];
 
     await updateJob(jobId, {
       progress_step: 2,
-      progress_message: `Inserindo ${leads.length} leads...`,
+      progress_message: `Inserindo ${items.length} leads...`,
     });
 
-    if (leads.length === 0) {
+    if (items.length === 0) {
       await updateJob(jobId, {
         status: 'failed',
         progress_message: 'Apify: nenhum resultado encontrado.',
@@ -183,15 +179,21 @@ export async function processJobApify(
       return { success: false, error: 'Nenhum resultado encontrado' };
     }
 
-    const rows = leads.map(l => ({
+    const rows = items.map(l => ({
       job_id: jobId,
-      name: l.name,
+      user_id: userId,
+      name: l.name || l.title || 'Sem nome',
       address: l.address || '',
+      city: l.city || null,
+      state: l.state || null,
+      country_code: l.countryCode || null,
       phone: l.phone || null,
       website: l.website || null,
       rating: l.rating || null,
-      reviews_count: l.reviews_count || null,
+      reviews_count: l.reviews_count || l.reviewsCount || null,
+      category_name: l.categoryName || null,
       source: 'APIFY',
+      status: 'found',
     }));
 
     for (let i = 0; i < rows.length; i += 100) {
