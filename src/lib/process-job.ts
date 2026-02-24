@@ -158,7 +158,7 @@ export async function processJobApifyMaps(
     const query = `${businessType} ${locationText}`;
 
     const { data, error } = await supabase.functions.invoke('apify-maps-proxy', {
-      body: { query, locationText, maxResults: quantity },
+      body: { query, locationText, limit: quantity },
     });
 
     if (error) throw new Error(error.message || 'Erro ao chamar proxy Apify');

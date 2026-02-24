@@ -155,7 +155,8 @@ Deno.serve(async (req) => {
 
     // ── Parse body ──
     const body = await req.json();
-    const { query, locationText, maxResults = 20 } = body;
+    const { query, locationText, limit, maxResults: legacyMax } = body;
+    const maxResults = limit ?? legacyMax ?? 20;
 
     if (!query || !locationText) {
       return new Response(
