@@ -6,10 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3, RefreshCw } from 'lucide-react';
 import { insertFakeLeads } from '@/lib/fake-data';
 import { Lead, exportLeadsToCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
+import { resumeJobApifyMaps } from '@/lib/process-job';
 
 const steps = ['Buscar empresas', 'Encontrar site', 'Pesquisar decisor', 'Encontrar e-mail', 'Exportar'];
 
@@ -22,6 +23,7 @@ const JobDetail = () => {
   const [search, setSearch] = useState('');
   const [loadingData, setLoadingData] = useState(true);
   const [inserting, setInserting] = useState(false);
+  const [resuming, setResuming] = useState(false);
 
   const fetchData = async () => {
     if (!id || !user) return;
@@ -62,6 +64,37 @@ const JobDetail = () => {
     toast({ title: 'CSV exportado!' });
   };
 
+  const canResume = job?.apify_run_id && (job?.status === 'processing' || job?.status === 'running');
+
+  const handleResume = async () => {
+    if (!job?.apify_run_id || !id) return;
+    setResuming(true);
+    toast({ title: 'Retomando busca Apify...' });
+
+    const pollInterval = setInterval(async () => {
+      const { data: updatedJob } = await supabase
+        .from('jobs')
+        .select('progress_message, status')
+        .eq('id', id)
+        .single();
+      if (updatedJob) setJob((prev: any) => ({ ...prev, ...updatedJob }));
+      if (updatedJob?.status === 'done' || updatedJob?.status === 'failed') {
+        clearInterval(pollInterval);
+      }
+    }, 1500);
+
+    const result = await resumeJobApifyMaps(id, job.apify_run_id, job.quantity || 20);
+    clearInterval(pollInterval);
+    await fetchData();
+
+    if (result.success) {
+      toast({ title: `Concluído! ${result.count} leads encontrados.` });
+    } else {
+      toast({ title: 'Erro ao retomar', description: result.error, variant: 'destructive' });
+    }
+    setResuming(false);
+  };
+
   const filtered = leads.filter(l =>
     !search || Object.values(l).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))
   );
@@ -84,6 +117,12 @@ const JobDetail = () => {
             <span className="text-sm text-muted-foreground ml-2">{job?.location_text}</span>
           </div>
           <div className="flex gap-2">
+            {canResume && (
+              <Button variant="outline" size="sm" onClick={handleResume} disabled={resuming}>
+                <RefreshCw className={`h-4 w-4 mr-1.5 ${resuming ? 'animate-spin' : ''}`} />
+                {resuming ? 'Retomando...' : 'Retomar Job'}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleFakeData} disabled={inserting || leads.length > 0}>
               <Database className="h-4 w-4 mr-1.5" />
               {inserting ? 'Inserindo...' : 'Dados de Exemplo'}
@@ -128,7 +167,7 @@ const JobDetail = () => {
                   <p className="text-sm text-muted-foreground mt-3">{job.progress_message}</p>
                 )}
                 <div className="mt-3">
-                  <Badge className={job.status === 'done' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'}>
+                  <Badge className={job.status === 'done' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-destructive/20 text-destructive' : job.status === 'processing' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-primary/20 text-primary'}>
                     {job.status}
                   </Badge>
                 </div>
