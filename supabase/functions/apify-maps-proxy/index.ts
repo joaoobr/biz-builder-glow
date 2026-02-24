@@ -118,10 +118,12 @@ Deno.serve(async (req) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
+    const searchString = `${query} ${location}`.trim();
     const actorInput = {
-      searchStringsArray: [query],
+      searchStringsArray: [searchString],
       locationQuery: location,
       maxCrawledPlacesPerSearch: maxResults,
+      language: 'pt',
     };
 
     console.log(`[apify-start] actorInput=${JSON.stringify(actorInput)}`);
