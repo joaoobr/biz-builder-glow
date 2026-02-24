@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.apify-maps-proxy]
 verify_jwt = false
+
+[functions.apify-maps-check]
+verify_jwt = false

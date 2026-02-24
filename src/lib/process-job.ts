@@ -1,15 +1,16 @@
 import { supabase } from '@/integrations/supabase/client';
 
 const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
-const SUPABASE_URL = 'https://nkgzwuvdxxfpyaotdlsf.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5rZ3p3dXZkeHhmcHlhb3RkbHNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4ODczNTgsImV4cCI6MjA4NzQ2MzM1OH0.v7ioBYk7qKqP-fmWF_YogzBdZyfD5JJCTp3mZkJ6jFQ';
 const USER_AGENT = 'GeoLeadsAI/1.0 (contact: joao@email.com)';
 const PAGE_SIZE = 50;
 const RATE_LIMIT_MS = 1100;
-const GOOGLE_RATE_LIMIT_MS = 200; // Google allows higher rate
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_RETRIES = 3;
 const BACKOFF_MS = [1000, 3000, 7000];
+
+const APIFY_POLL_INTERVAL_MS = 5000;
+const APIFY_MAX_POLL_TIME_MS = 300_000; // 5 minutes max
 
 function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -140,7 +141,15 @@ export async function processJob(
   }
 }
 
-// ─── Apify (Google Maps) ─────────────────────────────────────────────
+// ─── Apify (Google Maps) — Async flow ────────────────────────────────
+
+function getAuthHeaders(accessToken: string | undefined) {
+  return {
+    Authorization: accessToken
+      ? `Bearer ${accessToken}`
+      : `Bearer ${SUPABASE_ANON_KEY}`,
+  };
+}
 
 export async function processJobApifyMaps(
   jobId: string,
@@ -153,70 +162,72 @@ export async function processJobApifyMaps(
     await updateJob(jobId, {
       status: 'running',
       progress_step: 1,
-      progress_message: 'Buscando empresas via Apify (Google Maps)...',
+      progress_message: 'Iniciando busca via Apify (Google Maps)...',
     });
 
-    // Get current session token for explicit auth
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData?.session?.access_token;
+    const headers = getAuthHeaders(accessToken);
 
-    const { data, error } = await supabase.functions.invoke('apify-maps-proxy', {
+    // Step 1: Start the Apify run (returns immediately)
+    const { data: startData, error: startError } = await supabase.functions.invoke('apify-maps-proxy', {
       body: { query: businessType, location: locationText, limit: quantity },
-      headers: {
-        Authorization: accessToken
-          ? `Bearer ${accessToken}`
-          : `Bearer ${SUPABASE_ANON_KEY}`,
-      },
+      headers,
     });
 
-    if (error) throw new Error(error.message || 'Erro ao chamar proxy Apify');
-    if (data?.error) throw new Error(data.error);
+    if (startError) throw new Error(startError.message || 'Erro ao iniciar Apify');
+    if (startData?.error) throw new Error(startData.error);
 
-    const items: any[] = data?.leads || [];
+    const runId = startData?.runId;
+    if (!runId) throw new Error('Apify não retornou runId');
 
     await updateJob(jobId, {
-      progress_step: 2,
-      progress_message: `Inserindo ${items.length} leads...`,
+      apify_run_id: runId,
+      progress_message: `Apify run iniciado (${runId.slice(0, 8)}...). Aguardando resultados...`,
     });
 
-    if (items.length === 0) {
-      await updateJob(jobId, {
-        status: 'failed',
-        progress_message: 'Apify: nenhum resultado encontrado.',
+    // Step 2: Poll for results
+    const pollStart = Date.now();
+
+    while (Date.now() - pollStart < APIFY_MAX_POLL_TIME_MS) {
+      await delay(APIFY_POLL_INTERVAL_MS);
+
+      const { data: checkData, error: checkError } = await supabase.functions.invoke('apify-maps-check', {
+        body: { runId, jobId, limit: quantity },
+        headers,
       });
-      return { success: false, error: 'Nenhum resultado encontrado' };
+
+      if (checkError) throw new Error(checkError.message || 'Erro ao verificar Apify');
+      if (checkData?.error) throw new Error(checkData.error);
+
+      const status = checkData?.status;
+
+      if (status === 'processing') {
+        const elapsed = Math.round((Date.now() - pollStart) / 1000);
+        await updateJob(jobId, {
+          progress_message: `Apify processando... (${elapsed}s)`,
+        });
+        continue;
+      }
+
+      if (status === 'done') {
+        return { success: true, count: checkData.count || 0 };
+      }
+
+      if (status === 'failed') {
+        return { success: false, error: checkData.error || 'Apify run falhou' };
+      }
+
+      // Unknown status
+      throw new Error(`Status inesperado: ${status}`);
     }
 
-    const rows = items.map(l => ({
-      job_id: jobId,
-      user_id: userId,
-      name: l.name || l.title || 'Sem nome',
-      address: l.address || '',
-      city: l.city || null,
-      state: l.state || null,
-      country_code: l.countryCode || null,
-      phone: l.phone || null,
-      website: l.website || null,
-      rating: l.rating || null,
-      reviews_count: l.reviews_count || l.reviewsCount || null,
-      category_name: l.categoryName || null,
-      source: 'APIFY',
-      status: 'found',
-    }));
-
-    for (let i = 0; i < rows.length; i += 100) {
-      const batch = rows.slice(i, i + 100);
-      const { error: insertErr } = await supabase.from('leads').insert(batch);
-      if (insertErr) throw insertErr;
-    }
-
+    // Timeout
     await updateJob(jobId, {
-      status: 'done',
-      progress_step: 5,
-      progress_message: `Concluído — ${rows.length} leads via Apify`,
+      status: 'failed',
+      progress_message: `Timeout: Apify não completou em ${APIFY_MAX_POLL_TIME_MS / 1000}s`,
     });
-
-    return { success: true, count: rows.length };
+    return { success: false, error: 'Timeout aguardando Apify' };
   } catch (err: any) {
     await updateJob(jobId, {
       status: 'failed',

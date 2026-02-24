@@ -1,14 +1,12 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
+    'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const ACTOR_ID = 'compass/crawler-google-places';
-const TIMEOUT_MS = 180_000;
-const MAX_RETRIES = 2;
-const BACKOFF = [2000, 5000];
+const FETCH_TIMEOUT_MS = 25_000; // <30s to stay within edge function limits
 
 // Rate limiter per isolate
 const rateLimitMap = new Map<string, number[]>();
@@ -29,77 +27,7 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
-async function fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      const res = await fetch(url, { ...options, signal: controller.signal });
-      clearTimeout(timer);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res;
-    } catch (err: any) {
-      clearTimeout(timer);
-      if (attempt === MAX_RETRIES)
-        throw new Error(
-          `Failed after ${MAX_RETRIES + 1} attempts: ${err.name === 'AbortError' ? 'timeout 180s' : err.message}`,
-        );
-      await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-    }
-  }
-  throw new Error('Unreachable');
-}
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-interface ApifyItem {
-  title?: string;
-  address?: string;
-  phone?: string;
-  website?: string;
-  totalScore?: number;
-  reviewsCount?: number;
-  [key: string]: unknown;
-}
-
-interface NormalizedLead {
-  name: string;
-  address: string;
-  phone: string | null;
-  website: string | null;
-  rating: number | null;
-  reviews_count: number | null;
-  source: string;
-}
-
-function normalizeItems(items: ApifyItem[], maxResults: number): NormalizedLead[] {
-  const seen = new Set<string>();
-  const results: NormalizedLead[] = [];
-
-  for (const item of items) {
-    const name = (item.title || '').trim();
-    const address = (item.address || '').trim();
-    if (!name) continue;
-
-    const key = `${name.toLowerCase()}|${address.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    results.push({
-      name,
-      address,
-      phone: item.phone || null,
-      website: item.website || null,
-      rating: item.totalScore ?? null,
-      reviews_count: item.reviewsCount ?? null,
-      source: 'APIFY',
-    });
-
-    if (results.length >= maxResults) break;
-  }
-
-  return results;
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -109,6 +37,8 @@ Deno.serve(async (req) => {
   const start = Date.now();
 
   try {
+    console.log(`[apify-start] begin`);
+
     // ── Auth ──
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -134,6 +64,7 @@ Deno.serve(async (req) => {
     }
 
     const userId = claimsData.claims.sub as string;
+    console.log(`[apify-start] authenticated user=${userId} elapsed=${Date.now() - start}ms`);
 
     // ── Rate limit ──
     if (!checkRateLimit(userId)) {
@@ -159,6 +90,8 @@ Deno.serve(async (req) => {
     const location = (body.location || '').replaceAll('/', ', ').trim();
     const maxResults = body.limit ?? 20;
 
+    console.log(`[apify-start] after-body-parse query="${query}" location="${location}" max=${maxResults} elapsed=${Date.now() - start}ms`);
+
     if (!query) {
       return new Response(
         JSON.stringify({ error: 'query is required' }),
@@ -173,11 +106,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Run Actor ──
-    console.log(`[apify-start] user=${userId} query="${query}" location="${location}" max=${maxResults}`);
+    // ── Start Actor Run (async — waitForFinish=0) ──
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-    const runRes = await fetchWithRetry(
-      `${APIFY_BASE}/acts/${encodeURIComponent(ACTOR_ID)}/runs?waitForFinish=300`,
+    const runRes = await fetch(
+      `${APIFY_BASE}/acts/${encodeURIComponent(ACTOR_ID)}/runs?waitForFinish=0`,
       {
         method: 'POST',
         headers: {
@@ -189,39 +123,37 @@ Deno.serve(async (req) => {
           locationQuery: location,
           maxCrawledPlacesPerSearch: Math.min(maxResults, 100),
         }),
+        signal: controller.signal,
       },
     );
 
-    const runData = await runRes.json();
-    const datasetId = runData?.data?.defaultDatasetId;
+    clearTimeout(timer);
 
-    if (!datasetId) {
-      throw new Error(`Apify run failed: ${JSON.stringify(runData?.data?.status || runData)}`);
+    if (!runRes.ok) {
+      const text = await runRes.text();
+      throw new Error(`Apify start failed: HTTP ${runRes.status} — ${text.slice(0, 200)}`);
     }
 
-    // ── Fetch Dataset ──
-    const dsRes = await fetchWithRetry(
-      `${APIFY_BASE}/datasets/${datasetId}/items?format=json`,
-      {
-        headers: { Authorization: `Bearer ${apifyToken}` },
-      },
-    );
+    const runData = await runRes.json();
+    const runId = runData?.data?.id;
+    const datasetId = runData?.data?.defaultDatasetId;
 
-    const items: ApifyItem[] = await dsRes.json();
-    const leads = normalizeItems(items, maxResults);
+    if (!runId) {
+      throw new Error(`Apify run missing id: ${JSON.stringify(runData?.data?.status || runData)}`);
+    }
 
     const duration = Date.now() - start;
-    console.log(
-      `[apify-done] user=${userId} query="${query}" items=${items.length} leads=${leads.length} duration=${duration}ms`,
-    );
+    console.log(`[apify-start] apify-run-started runId=${runId} datasetId=${datasetId} elapsed=${duration}ms`);
 
-    return new Response(JSON.stringify({ leads }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (err: any) {
-    console.error(`[error] ${err.message}`);
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ runId, datasetId, status: 'processing' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  } catch (err: any) {
+    const msg = err.name === 'AbortError' ? `Timeout (${FETCH_TIMEOUT_MS / 1000}s) starting Apify run` : err.message;
+    console.error(`[apify-start][error] ${msg}`);
+    return new Response(
+      JSON.stringify({ error: msg }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }
