@@ -25,6 +25,7 @@ const JobDetail = () => {
   const [inserting, setInserting] = useState(false);
   const [resuming, setResuming] = useState(false);
   const [enrichingWebsite, setEnrichingWebsite] = useState(false);
+  const [enrichingDecisionMaker, setEnrichingDecisionMaker] = useState(false);
 
   const fetchData = async () => {
     if (!id || !user) return;
@@ -146,6 +147,55 @@ const JobDetail = () => {
     }
   };
 
+  const handleEnrichDecisionMaker = async () => {
+    if (!id) return;
+    setEnrichingDecisionMaker(true);
+    toast({ title: 'Iniciando pesquisa de decisores...' });
+
+    const pollInterval = setInterval(async () => {
+      const { data: updatedJob } = await supabase
+        .from('jobs')
+        .select('progress_message, progress_step, status')
+        .eq('id', id)
+        .single();
+      if (updatedJob) setJob((prev: any) => ({ ...prev, ...updatedJob }));
+    }, 2000);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      const { data, error } = await supabase.functions.invoke('decision-maker-enrich', {
+        body: { jobId: id },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
+
+      clearInterval(pollInterval);
+
+      if (error) {
+        let msg = 'Erro ao pesquisar decisores';
+        try {
+          if (error.context && typeof error.context.json === 'function') {
+            const body = await error.context.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch {}
+        toast({ title: 'Erro', description: msg, variant: 'destructive' });
+      } else if (data?.error) {
+        toast({ title: 'Erro', description: data.error, variant: 'destructive' });
+      } else {
+        toast({ title: `Concluído! ${data?.updatedCount ?? 0} decisores encontrados.` });
+      }
+
+      await fetchData();
+    } catch (e: any) {
+      clearInterval(pollInterval);
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    } finally {
+      setEnrichingDecisionMaker(false);
+    }
+  };
+
   const filtered = leads.filter(l =>
     !search || Object.values(l).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))
   );
@@ -230,6 +280,17 @@ const JobDetail = () => {
                     >
                       <Search className={`h-4 w-4 mr-1.5 ${enrichingWebsite ? 'animate-pulse' : ''}`} />
                       {enrichingWebsite ? 'Buscando sites...' : '2. Encontrar Site'}
+                    </Button>
+                  )}
+                  {leads.length > 0 && progressStep >= 2 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleEnrichDecisionMaker}
+                      disabled={enrichingDecisionMaker || job.status === 'running'}
+                    >
+                      <UserCheck className={`h-4 w-4 mr-1.5 ${enrichingDecisionMaker ? 'animate-pulse' : ''}`} />
+                      {enrichingDecisionMaker ? 'Pesquisando decisores...' : '3. Pesquisar Decisor'}
                     </Button>
                   )}
                 </div>

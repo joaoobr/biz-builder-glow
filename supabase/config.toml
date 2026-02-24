@@ -9,3 +9,6 @@ verify_jwt = false
 
 [functions.website-enrich]
 verify_jwt = false
+
+[functions.decision-maker-enrich]
+verify_jwt = false

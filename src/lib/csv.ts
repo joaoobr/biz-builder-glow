@@ -12,6 +12,8 @@ export interface Lead {
   reviews_count: number | null;
   decision_maker_name: string | null;
   decision_maker_role: string | null;
+  decision_maker_source_url: string | null;
+  decision_maker_confidence: number | null;
   linkedin_url: string | null;
   corporate_email: string | null;
   email_status: string;
