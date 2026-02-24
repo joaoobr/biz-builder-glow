@@ -151,6 +151,25 @@ function getAuthHeaders(accessToken: string | undefined) {
   };
 }
 
+/**
+ * Extract a friendly error message from supabase.functions.invoke errors.
+ * The SDK wraps non-2xx as FunctionsHttpError with a generic message;
+ * the actual JSON body is in error.context (a Response).
+ */
+async function extractFunctionError(error: any, fallback: string): Promise<string> {
+  if (!error) return fallback;
+  try {
+    // supabase-js v2: FunctionsHttpError has .context as Response
+    if (error.context && typeof error.context.json === 'function') {
+      const body = await error.context.json();
+      if (body?.error) return body.error;
+    }
+  } catch { /* ignore parse errors */ }
+  // If the message is the generic SDK message, return fallback instead
+  if (error.message?.includes('non-2xx')) return fallback;
+  return error.message || fallback;
+}
+
 export async function processJobApifyMaps(
   jobId: string,
   businessType: string,
@@ -207,7 +226,10 @@ export async function processJobApifyMaps(
       headers,
     });
 
-    if (startError) throw new Error(startError.message || 'Erro ao iniciar Apify');
+    if (startError) {
+      const msg = await extractFunctionError(startError, 'Erro ao iniciar busca no Apify. Tente novamente.');
+      throw new Error(msg);
+    }
     if (startData?.error) throw new Error(startData.error);
 
     const runId = startData?.runId;
@@ -229,7 +251,10 @@ export async function processJobApifyMaps(
         headers,
       });
 
-      if (checkError) throw new Error(checkError.message || 'Erro ao verificar Apify');
+      if (checkError) {
+        const msg = await extractFunctionError(checkError, 'Erro ao verificar status do Apify.');
+        throw new Error(msg);
+      }
       if (checkData?.error) throw new Error(checkData.error);
 
       const status = checkData?.status;
@@ -247,11 +272,15 @@ export async function processJobApifyMaps(
       }
 
       if (status === 'failed') {
+        await updateJob(jobId, {
+          status: 'failed',
+          progress_message: `Apify falhou: ${checkData.error || 'erro desconhecido'}`,
+        });
         return { success: false, error: checkData.error || 'Apify run falhou' };
       }
 
       // Unknown status
-      throw new Error(`Status inesperado: ${status}`);
+      throw new Error(`Status inesperado do Apify: ${status}`);
     }
 
     // Timeout
