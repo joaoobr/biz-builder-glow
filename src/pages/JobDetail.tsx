@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3, RefreshCw, Search } from 'lucide-react';
+import { ArrowLeft, Download, Database, Users, Globe, Mail, UserCheck, BarChart3, Search } from 'lucide-react';
 import { insertFakeLeads } from '@/lib/fake-data';
 import { Lead, exportLeadsToCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
@@ -23,7 +23,6 @@ const JobDetail = () => {
   const [search, setSearch] = useState('');
   const [loadingData, setLoadingData] = useState(true);
   const [inserting, setInserting] = useState(false);
-  const [resuming, setResuming] = useState(false);
   const [enrichingWebsite, setEnrichingWebsite] = useState(false);
   const [enrichingDecisionMaker, setEnrichingDecisionMaker] = useState(false);
 
@@ -127,36 +126,6 @@ const JobDetail = () => {
     toast({ title: 'CSV exportado!' });
   };
 
-  const canResume = job?.apify_run_id && (job?.status === 'processing' || job?.status === 'running');
-
-  const handleResume = async () => {
-    if (!job?.apify_run_id || !id) return;
-    setResuming(true);
-    toast({ title: 'Retomando busca Apify...' });
-
-    const pollInterval = setInterval(async () => {
-      const { data: updatedJob } = await supabase
-        .from('jobs')
-        .select('progress_message, status')
-        .eq('id', id)
-        .single();
-      if (updatedJob) setJob((prev: any) => ({ ...prev, ...updatedJob }));
-      if (updatedJob?.status === 'done' || updatedJob?.status === 'failed') {
-        clearInterval(pollInterval);
-      }
-    }, 1500);
-
-    const result = await resumeJobApifyMaps(id, job.apify_run_id, job.quantity || 20);
-    clearInterval(pollInterval);
-    await fetchData();
-
-    if (result.success) {
-      toast({ title: `Concluído! ${result.count} leads encontrados.` });
-    } else {
-      toast({ title: 'Erro ao retomar', description: result.error, variant: 'destructive' });
-    }
-    setResuming(false);
-  };
 
   const handleEnrichWebsite = async () => {
     if (!id) return;
@@ -279,12 +248,6 @@ const JobDetail = () => {
             <span className="text-sm text-muted-foreground ml-2">{job?.location_text}</span>
           </div>
           <div className="flex gap-2">
-            {canResume && (
-              <Button variant="outline" size="sm" onClick={handleResume} disabled={resuming}>
-                <RefreshCw className={`h-4 w-4 mr-1.5 ${resuming ? 'animate-spin' : ''}`} />
-                {resuming ? 'Retomando...' : 'Retomar Job'}
-              </Button>
-            )}
             <Button variant="outline" size="sm" onClick={handleFakeData} disabled={inserting || leads.length > 0}>
               <Database className="h-4 w-4 mr-1.5" />
               {inserting ? 'Inserindo...' : 'Dados de Exemplo'}
