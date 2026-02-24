@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, LogOut, History, Settings, Zap, Users, Globe, Mail, UserCheck, BarChart3, AlertTriangle } from 'lucide-react';
+import { Plus, LogOut, History, Settings, Zap, Users, Globe, Mail, UserCheck, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { processJob, processJobGooglePlaces } from '@/lib/process-job';
 
@@ -22,8 +22,6 @@ const AppHome = () => {
   const [processing, setProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [leads, setLeads] = useState<any[]>([]);
-  const [googleApiKey, setGoogleApiKey] = useState<string | null>(null);
-  const [googleKeyLoaded, setGoogleKeyLoaded] = useState(false);
   const [form, setForm] = useState({
     business_type: '',
     location: '',
@@ -31,20 +29,6 @@ const AppHome = () => {
     radius_km: 10,
     source: 'OSM',
   });
-
-  // Fetch Google Places API key from user_settings
-  useEffect(() => {
-    if (!user) return;
-    supabase
-      .from('user_settings')
-      .select('google_places_key')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setGoogleApiKey(data?.google_places_key || null);
-        setGoogleKeyLoaded(true);
-      });
-  }, [user]);
 
   const fetchLeads = useCallback(async (jobId: string) => {
     const { data } = await supabase
@@ -65,16 +49,9 @@ const AppHome = () => {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  const isGoogleSelected = form.source === 'Google Places';
-  const googleKeyMissing = isGoogleSelected && googleKeyLoaded && !googleApiKey;
-
   const handleCreate = async () => {
     if (!form.business_type || !form.location) {
       toast({ title: 'Preencha os campos obrigatórios', variant: 'destructive' });
-      return;
-    }
-    if (googleKeyMissing) {
-      toast({ title: 'Configure sua API Key em Config', variant: 'destructive' });
       return;
     }
     setCreating(true);
@@ -112,8 +89,8 @@ const AppHome = () => {
       }, 1500);
 
       let result: { success: boolean; count?: number; error?: string };
-      if (form.source === 'Google Places' && googleApiKey) {
-        result = await processJobGooglePlaces(data.id, form.business_type, form.location, form.quantity, googleApiKey);
+      if (form.source === 'Google Places') {
+        result = await processJobGooglePlaces(data.id, form.business_type, form.location, form.quantity);
       } else {
         result = await processJob(data.id, form.business_type, form.location, form.quantity);
       }
@@ -227,12 +204,6 @@ const AppHome = () => {
                     <SelectItem value="Google Places">Google Places (robusto)</SelectItem>
                   </SelectContent>
                 </Select>
-                {googleKeyMissing && (
-                  <p className="flex items-center gap-1 text-xs text-destructive mt-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    <span>Configure sua API Key em <Link to="/settings" className="underline font-medium">Config</Link></span>
-                  </p>
-                )}
               </div>
               <div className="flex items-end">
                 <Button onClick={handleCreate} disabled={creating || processing} size="lg" className="w-full h-10">
