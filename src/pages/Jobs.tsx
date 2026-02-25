@@ -15,6 +15,7 @@ interface Job {
   status: string;
   source: string;
   created_at: string;
+  leads: { count: number }[];
 }
 
 const statusColor: Record<string, string> = {
@@ -34,7 +35,7 @@ const Jobs = () => {
     if (!user) return;
     supabase
       .from('jobs')
-      .select('*')
+      .select('*, leads(count)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .then(({ data }) => {
@@ -92,7 +93,18 @@ const Jobs = () => {
                       <p className="text-sm text-muted-foreground">{job.location_text} · {job.quantity} leads · {job.source}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge className={statusColor[job.status] || 'bg-muted'}>{job.status}</Badge>
+                      {(() => {
+                        const leadsCount = job.leads?.[0]?.count ?? 0;
+                        const displayStatus = job.status === 'done' ? '✓ Concluído'
+                          : job.status === 'failed' ? '✗ Falhou'
+                          : (job.status === 'running' || job.status === 'processing') && leadsCount > 0 ? '✓ Concluído'
+                          : job.status === 'running' ? '⟳ Buscando...'
+                          : job.status;
+                        const colorClass = (job.status === 'done' || ((job.status === 'running' || job.status === 'processing') && leadsCount > 0))
+                          ? 'bg-green-500/20 text-green-400'
+                          : statusColor[job.status] || 'bg-muted';
+                        return <Badge className={colorClass}>{displayStatus}</Badge>;
+                      })()}
                       <span className="text-xs text-muted-foreground">{new Date(job.created_at).toLocaleDateString('pt-BR')}</span>
                     </div>
                   </CardContent>

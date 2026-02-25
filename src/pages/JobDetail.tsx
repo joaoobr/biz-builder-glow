@@ -348,7 +348,7 @@ const JobDetail = () => {
                       {filtered.length === 0 ? (
                         <tr>
                           <td colSpan={12} className="px-3 py-12 text-center text-muted-foreground">
-                            {leads.length === 0 ? 'Sem leads. Use "Dados de Exemplo" para testar.' : 'Nenhum resultado para a busca.'}
+                            {leads.length === 0 ? 'Aguardando leads...' : 'Nenhum resultado para a busca.'}
                           </td>
                         </tr>
                       ) : filtered.map(l => (
