@@ -29,10 +29,11 @@ const AppHome = () => {
   const [processing, setProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [leads, setLeads] = useState<any[]>([]);
+  const maxLeads = remaining > 0 ? remaining : 0;
   const [form, setForm] = useState({
     business_type: '',
     location: '',
-    quantity: 100,
+    quantity: maxLeads,
     radius_km: 10,
     source: 'OSM',
   });
@@ -65,13 +66,18 @@ const AppHome = () => {
       toast({ title: 'Créditos esgotados', description: 'Você não tem créditos suficientes. Entre em contato para upgrade.', variant: 'destructive' });
       return;
     }
+    const cappedQuantity = Math.min(form.quantity, remaining);
+    if (cappedQuantity <= 0) {
+      toast({ title: 'Sem créditos disponíveis', variant: 'destructive' });
+      return;
+    }
     setCreating(true);
     try {
       const { data, error } = await supabase.from('jobs').insert({
         user_id: user.id,
         business_type: form.business_type,
         location_text: form.location,
-        quantity: form.quantity,
+        quantity: cappedQuantity,
         radius_km: form.radius_km,
         source: form.source,
         status: 'queued',
@@ -101,9 +107,9 @@ const AppHome = () => {
 
       let result: { success: boolean; count?: number; error?: string };
       if (form.source === 'Apify') {
-        result = await processJobApifyMaps(data.id, form.business_type, form.location, form.quantity, user.id);
+        result = await processJobApifyMaps(data.id, form.business_type, form.location, cappedQuantity, user.id);
       } else {
-        result = await processJob(data.id, form.business_type, form.location, form.quantity);
+        result = await processJob(data.id, form.business_type, form.location, cappedQuantity);
       }
       clearInterval(pollInterval);
 
@@ -221,13 +227,13 @@ const AppHome = () => {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Quantidade</Label>
+                <Label className="text-xs">Quantidade (máx: {remaining})</Label>
                 <Input
                   type="number"
-                  min={10}
-                  max={5000}
+                  min={1}
+                  max={remaining}
                   value={form.quantity}
-                  onChange={e => setForm(f => ({ ...f, quantity: parseInt(e.target.value) || 100 }))}
+                  onChange={e => setForm(f => ({ ...f, quantity: Math.min(parseInt(e.target.value) || 0, remaining) }))}
                   className="h-9"
                 />
               </div>
