@@ -402,7 +402,7 @@ const JobDetail = () => {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-secondary/50">
-                        {['Nome', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews', 'Decisor', 'Cargo', 'LinkedIn', 'E-mail', 'Status', 'Fonte'].map(h => (
+                        {['Nome', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews', 'Decisor', 'Cargo', 'LinkedIn', 'E-mail', 'Lusha Email', 'Lusha Fone', 'Status', 'Fonte'].map(h => (
                           <th key={h} className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
