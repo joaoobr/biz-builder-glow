@@ -440,6 +440,8 @@ const JobDetail = () => {
                           <td className="px-3 py-2 whitespace-nowrap">{l.decision_maker_role ?? '—'}</td>
                           <td className="px-3 py-2">{l.linkedin_url ? <a href={l.linkedin_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">Ver</a> : '—'}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{l.corporate_email ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{(l as any).lusha_email ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{(l as any).lusha_phone ?? '—'}</td>
                           <td className="px-3 py-2">
                             <Badge variant="outline" className={l.email_status === 'verified' ? 'text-green-400 border-green-400/30' : l.email_status === 'catch-all' ? 'text-yellow-400 border-yellow-400/30' : 'text-muted-foreground'}>
                               {l.email_status}
