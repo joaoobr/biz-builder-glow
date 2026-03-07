@@ -8,7 +8,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 
-const PAGES_TO_TRY = ['/sobre', '/equipe', '/quem-somos', '/contato', '/about', '/team', '/about-us', '/nossa-equipe'];
+const PAGES_TO_TRY = [
+  '/sobre', '/equipe', '/quem-somos', '/contato', '/about', '/team', '/about-us',
+  '/nossa-equipe', '/empresa', '/institucional', '/a-empresa', '/quem-somos',
+  '/diretoria', '/governanca', '/leadership', '/management', '/nosso-time',
+  '/historia', '/about/team', '/about/leadership',
+];
 
 async function fetchPageText(baseUrl: string, path: string): Promise<{ text: string; url: string } | null> {
   const fullUrl = baseUrl.replace(/\/+$/, '') + path;
