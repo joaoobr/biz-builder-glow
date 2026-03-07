@@ -212,6 +212,55 @@ const JobDetail = () => {
     }
   };
 
+  const handleEnrichLusha = async () => {
+    if (!id) return;
+    setEnrichingLusha(true);
+    toast({ title: 'Iniciando enriquecimento via Lusha...' });
+
+    const pollInterval = setInterval(async () => {
+      const { data: updatedJob } = await supabase
+        .from('jobs')
+        .select('progress_message, progress_step, status')
+        .eq('id', id)
+        .single();
+      if (updatedJob) setJob((prev: any) => ({ ...prev, ...updatedJob }));
+    }, 2000);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      const { data, error } = await supabase.functions.invoke('lusha-enrich', {
+        body: { jobId: id },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
+
+      clearInterval(pollInterval);
+
+      if (error) {
+        let msg = 'Erro ao enriquecer via Lusha';
+        try {
+          if (error.context && typeof error.context.json === 'function') {
+            const body = await error.context.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch {}
+        toast({ title: 'Erro', description: msg, variant: 'destructive' });
+      } else if (data?.error) {
+        toast({ title: 'Erro', description: data.error, variant: 'destructive' });
+      } else {
+        toast({ title: `Concluído! ${data?.updatedCount ?? 0} enriquecidos (${data?.cacheHits ?? 0} do cache).` });
+      }
+
+      await fetchData();
+    } catch (e: any) {
+      clearInterval(pollInterval);
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    } finally {
+      setEnrichingLusha(false);
+    }
+  };
+
   const filtered = leads.filter(l =>
     !search || Object.values(l).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))
   );
