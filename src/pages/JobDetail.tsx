@@ -374,6 +374,7 @@ const JobDetail = () => {
                 { label: 'Com Site', value: withSite, icon: Globe },
                 { label: 'Com Email', value: withEmail, icon: Mail },
                 { label: 'Com Decisor', value: withDecisionMaker, icon: UserCheck },
+                { label: 'Lusha', value: withLusha, icon: Sparkles },
                 { label: 'Taxa Preench.', value: `${fillRate}%`, icon: BarChart3 },
               ].map(({ label, value, icon: Icon }) => (
                 <Card key={label}>
