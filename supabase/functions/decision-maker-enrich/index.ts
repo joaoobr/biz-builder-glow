@@ -27,10 +27,10 @@ async function fetchPageText(baseUrl: string, path: string): Promise<{ text: str
     const html = await res.text();
     // Strip tags, keep text
     const text = html
-      .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')
-      .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
-      .replace(/\\s+/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 6000); // limit tokens
     if (text.length < 50) return null;
