@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Download, Users, Globe, Mail, UserCheck, BarChart3, Search } from 'lucide-react';
+import { ArrowLeft, Download, Users, Globe, Mail, UserCheck, BarChart3, Search, Sparkles } from 'lucide-react';
 import { Lead, exportLeadsToCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { resumeJobApifyMaps } from '@/lib/process-job';
