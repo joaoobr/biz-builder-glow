@@ -40,37 +40,65 @@ async function queryLusha(
   firstName?: string,
   lastName?: string,
 ): Promise<any | null> {
+  // If we have a person name, use person endpoint
+  // If not, try company endpoint for general contacts
   const params = new URLSearchParams({ company: domain });
   if (firstName) params.set('firstName', firstName);
   if (lastName) params.set('lastName', lastName);
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+  // Try person endpoint first
+  const endpoints = [
+    `${LUSHA_API_URL}?${params.toString()}`,
+  ];
 
-    const res = await fetch(`${LUSHA_API_URL}?${params.toString()}`, {
-      method: 'GET',
-      headers: { api_key: apiKey },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (res.status === 429) {
-      console.warn('[lusha-enrich] Rate limited by Lusha API');
-      return { _rateLimited: true };
-    }
-
-    if (!res.ok) {
-      console.error(`[lusha-enrich] Lusha API error: ${res.status}`);
-      return null;
-    }
-
-    return await res.json();
-  } catch (err) {
-    console.error(`[lusha-enrich] Lusha fetch error: ${err}`);
-    return null;
+  // If no name provided, also try the company prospecting endpoint
+  if (!firstName && !lastName) {
+    const companyParams = new URLSearchParams({ company: domain, limit: '1' });
+    endpoints.push(`https://api.lusha.com/v2/prospecting/contact?${companyParams.toString()}`);
   }
+
+  for (const url of endpoints) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      console.log(`[lusha-enrich] Trying: ${url}`);
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { api_key: apiKey },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (res.status === 429) {
+        console.warn('[lusha-enrich] Rate limited by Lusha API');
+        return { _rateLimited: true };
+      }
+
+      if (!res.ok) {
+        console.error(`[lusha-enrich] Lusha API error: ${res.status} ${await res.text().catch(() => '')}`);
+        continue; // try next endpoint
+      }
+
+      const data = await res.json();
+      console.log(`[lusha-enrich] Response from ${url}: ${JSON.stringify(data).slice(0, 500)}`);
+      
+      // For prospecting endpoint, extract first contact
+      if (url.includes('prospecting') && data?.data?.length > 0) {
+        return data.data[0];
+      }
+      
+      if (data && (data.emailAddresses?.length || data.phoneNumbers?.length)) {
+        return data;
+      }
+    } catch (err) {
+      console.error(`[lusha-enrich] Lusha fetch error: ${err}`);
+    }
+  }
+  
+  return null;
 }
 
 /**
