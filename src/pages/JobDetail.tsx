@@ -351,6 +351,17 @@ const JobDetail = () => {
                       {enrichingDecisionMaker ? 'Pesquisando decisores...' : '3. Pesquisar Decisor'}
                     </Button>
                   )}
+                  {leads.length > 0 && progressStep >= 3 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleEnrichLusha}
+                      disabled={enrichingLusha || isJobActive}
+                    >
+                      <Sparkles className={`h-4 w-4 mr-1.5 ${enrichingLusha ? 'animate-pulse' : ''}`} />
+                      {enrichingLusha ? 'Enriquecendo via Lusha...' : '4. Enriquecer (Lusha)'}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
