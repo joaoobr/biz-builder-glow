@@ -330,34 +330,34 @@ const JobDetail = () => {
                   <Badge className={job.status === 'done' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-destructive/20 text-destructive' : job.status === 'processing' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-primary/20 text-primary'}>
                     {job.status === 'done' ? '✓ Concluído' : job.status === 'failed' ? '✗ Falhou' : (job.status === 'running' || job.status === 'processing') && leads.length > 0 ? '✓ Concluído' : job.status === 'running' ? '⟳ Buscando...' : job.status}
                   </Badge>
-                  {leads.length > 0 && progressStep >= 1 && (
+                  {leads.length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleEnrichWebsite}
-                      disabled={enrichingWebsite || isJobActive}
+                      disabled={enrichingWebsite || enrichingDecisionMaker || enrichingLusha || isJobActive}
                     >
                       <Search className={`h-4 w-4 mr-1.5 ${enrichingWebsite ? 'animate-pulse' : ''}`} />
                       {enrichingWebsite ? 'Buscando sites...' : '2. Encontrar Site'}
                     </Button>
                   )}
-                  {leads.length > 0 && progressStep >= 2 && (
+                  {leads.length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleEnrichDecisionMaker}
-                      disabled={enrichingDecisionMaker || isJobActive}
+                      disabled={enrichingDecisionMaker || enrichingWebsite || enrichingLusha || isJobActive}
                     >
                       <UserCheck className={`h-4 w-4 mr-1.5 ${enrichingDecisionMaker ? 'animate-pulse' : ''}`} />
                       {enrichingDecisionMaker ? 'Pesquisando decisores...' : '3. Pesquisar Decisor'}
                     </Button>
                   )}
-                  {leads.length > 0 && progressStep >= 3 && (
+                  {leads.length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleEnrichLusha}
-                      disabled={enrichingLusha || isJobActive}
+                      disabled={enrichingLusha || enrichingWebsite || enrichingDecisionMaker || isJobActive}
                     >
                       <Sparkles className={`h-4 w-4 mr-1.5 ${enrichingLusha ? 'animate-pulse' : ''}`} />
                       {enrichingLusha ? 'Enriquecendo via Lusha...' : '4. Enriquecer (Lusha)'}
