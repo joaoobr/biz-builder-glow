@@ -23,6 +23,7 @@ const JobDetail = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [enrichingWebsite, setEnrichingWebsite] = useState(false);
   const [enrichingDecisionMaker, setEnrichingDecisionMaker] = useState(false);
+  const [enrichingLusha, setEnrichingLusha] = useState(false);
 
   const fetchData = async () => {
     if (!id || !user) return;
