@@ -19,12 +19,19 @@ export interface Lead {
   email_status: string;
   source: string;
   created_at: string;
+  lusha_email?: string | null;
+  lusha_phone?: string | null;
+  lusha_linkedin?: string | null;
+  lusha_title?: string | null;
+  lusha_source?: string | null;
 }
 
 export function exportLeadsToCSV(leads: Lead[], filename: string) {
   const headers = [
     'Nome do Negócio', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews',
-    'Decisor', 'Cargo', 'LinkedIn', 'E-mail Corporativo', 'Status E-mail', 'Fonte'
+    'Decisor', 'Cargo', 'LinkedIn', 'E-mail Corporativo',
+    'Lusha Email', 'Lusha Telefone', 'Lusha LinkedIn', 'Lusha Cargo',
+    'Status E-mail', 'Fonte'
   ];
 
   const rows = leads.map(l => [
@@ -32,6 +39,8 @@ export function exportLeadsToCSV(leads: Lead[], filename: string) {
     l.rating?.toString() ?? '', l.reviews_count?.toString() ?? '',
     l.decision_maker_name ?? '', l.decision_maker_role ?? '',
     l.linkedin_url ?? '', l.corporate_email ?? '',
+    l.lusha_email ?? '', l.lusha_phone ?? '',
+    l.lusha_linkedin ?? '', l.lusha_title ?? '',
     l.email_status, l.source
   ]);
 
