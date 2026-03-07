@@ -368,7 +368,7 @@ const JobDetail = () => {
             </Card>
 
             {/* Metrics */}
-            <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 grid-cols-2 lg:grid-cols-7">
               {[
                 { label: 'Total Leads', value: leads.length, icon: Users },
                 { label: 'Com Site', value: withSite, icon: Globe },
