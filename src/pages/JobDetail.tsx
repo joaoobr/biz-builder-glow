@@ -266,8 +266,9 @@ const JobDetail = () => {
   );
 
   const withSite = leads.filter(l => l.website_url || l.website).length;
-  const withEmail = leads.filter(l => l.corporate_email).length;
+  const withEmail = leads.filter(l => l.corporate_email || (l as any).lusha_email).length;
   const withDecisionMaker = leads.filter(l => l.decision_maker_name).length;
+  const withLusha = leads.filter(l => (l as any).lusha_source === 'lusha' || (l as any).lusha_source === 'cache').length;
   const fillRate = leads.length ? Math.round(((withSite + withEmail + withDecisionMaker) / (leads.length * 3)) * 100) : 0;
   const progressStep = job?.progress_step || 0;
 
