@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
     // ── Fetch leads without website_url but with website ──
     const { data: leads, error: leadsErr } = await supabase
       .from('leads')
-      .select('id, name, address, website, city, state')
+      .select('id, name, address, website')
       .eq('job_id', jobId)
       .is('website_url', null)
       .not('website', 'is', null)
