@@ -39,7 +39,7 @@ const JobDetail = () => {
   // Auto-poll when job is running/processing
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const prevStatusRef = useRef<string | null>(null);
-  const isJobActive = job?.status === 'running' || job?.status === 'processing' || job?.status === 'queued';
+  const isJobActive = (job?.status === 'running' || job?.status === 'processing' || job?.status === 'queued') && leads.length === 0;
 
   useEffect(() => {
     fetchData();
