@@ -410,7 +410,7 @@ const JobDetail = () => {
                     <tbody>
                       {filtered.length === 0 ? (
                         <tr>
-                          <td colSpan={12} className="px-3 py-12 text-center text-muted-foreground">
+                          <td colSpan={14} className="px-3 py-12 text-center text-muted-foreground">
                             {leads.length === 0 ? 'Aguardando leads...' : 'Nenhum resultado para a busca.'}
                           </td>
                         </tr>
