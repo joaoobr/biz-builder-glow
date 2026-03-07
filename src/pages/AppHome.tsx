@@ -114,13 +114,16 @@ const AppHome = () => {
       clearInterval(pollInterval);
 
       if (result.success && result.count) {
-        await supabase
+        const { error: creditErr } = await supabase
           .from('user_credits')
           .update({
             credits_used: (credits?.credits_used || 0) + result.count,
             updated_at: new Date().toISOString(),
           })
           .eq('user_id', user.id);
+        if (creditErr) {
+          console.error('[credits] Failed to update credits:', creditErr.message);
+        }
         refetchCredits();
         toast({ title: `Concluído! ${result.count} leads encontrados. (${result.count} créditos consumidos)` });
       } else if (result.success) {
