@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Download, Users, Globe, Mail, UserCheck, BarChart3, Search } from 'lucide-react';
+import { ArrowLeft, Download, Users, Globe, Mail, UserCheck, BarChart3, Search, Sparkles } from 'lucide-react';
 import { Lead, exportLeadsToCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { resumeJobApifyMaps } from '@/lib/process-job';
@@ -23,6 +23,7 @@ const JobDetail = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [enrichingWebsite, setEnrichingWebsite] = useState(false);
   const [enrichingDecisionMaker, setEnrichingDecisionMaker] = useState(false);
+  const [enrichingLusha, setEnrichingLusha] = useState(false);
 
   const fetchData = async () => {
     if (!id || !user) return;
@@ -211,13 +212,63 @@ const JobDetail = () => {
     }
   };
 
+  const handleEnrichLusha = async () => {
+    if (!id) return;
+    setEnrichingLusha(true);
+    toast({ title: 'Iniciando enriquecimento via Lusha...' });
+
+    const pollInterval = setInterval(async () => {
+      const { data: updatedJob } = await supabase
+        .from('jobs')
+        .select('progress_message, progress_step, status')
+        .eq('id', id)
+        .single();
+      if (updatedJob) setJob((prev: any) => ({ ...prev, ...updatedJob }));
+    }, 2000);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      const { data, error } = await supabase.functions.invoke('lusha-enrich', {
+        body: { jobId: id },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
+
+      clearInterval(pollInterval);
+
+      if (error) {
+        let msg = 'Erro ao enriquecer via Lusha';
+        try {
+          if (error.context && typeof error.context.json === 'function') {
+            const body = await error.context.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch {}
+        toast({ title: 'Erro', description: msg, variant: 'destructive' });
+      } else if (data?.error) {
+        toast({ title: 'Erro', description: data.error, variant: 'destructive' });
+      } else {
+        toast({ title: `Concluído! ${data?.updatedCount ?? 0} enriquecidos (${data?.cacheHits ?? 0} do cache).` });
+      }
+
+      await fetchData();
+    } catch (e: any) {
+      clearInterval(pollInterval);
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    } finally {
+      setEnrichingLusha(false);
+    }
+  };
+
   const filtered = leads.filter(l =>
     !search || Object.values(l).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))
   );
 
   const withSite = leads.filter(l => l.website_url || l.website).length;
-  const withEmail = leads.filter(l => l.corporate_email).length;
+  const withEmail = leads.filter(l => l.corporate_email || (l as any).lusha_email).length;
   const withDecisionMaker = leads.filter(l => l.decision_maker_name).length;
+  const withLusha = leads.filter(l => (l as any).lusha_source === 'lusha' || (l as any).lusha_source === 'cache').length;
   const fillRate = leads.length ? Math.round(((withSite + withEmail + withDecisionMaker) / (leads.length * 3)) * 100) : 0;
   const progressStep = job?.progress_step || 0;
 
@@ -301,17 +352,29 @@ const JobDetail = () => {
                       {enrichingDecisionMaker ? 'Pesquisando decisores...' : '3. Pesquisar Decisor'}
                     </Button>
                   )}
+                  {leads.length > 0 && progressStep >= 3 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleEnrichLusha}
+                      disabled={enrichingLusha || isJobActive}
+                    >
+                      <Sparkles className={`h-4 w-4 mr-1.5 ${enrichingLusha ? 'animate-pulse' : ''}`} />
+                      {enrichingLusha ? 'Enriquecendo via Lusha...' : '4. Enriquecer (Lusha)'}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
             {/* Metrics */}
-            <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 grid-cols-2 lg:grid-cols-7">
               {[
                 { label: 'Total Leads', value: leads.length, icon: Users },
                 { label: 'Com Site', value: withSite, icon: Globe },
                 { label: 'Com Email', value: withEmail, icon: Mail },
                 { label: 'Com Decisor', value: withDecisionMaker, icon: UserCheck },
+                { label: 'Lusha', value: withLusha, icon: Sparkles },
                 { label: 'Taxa Preench.', value: `${fillRate}%`, icon: BarChart3 },
               ].map(({ label, value, icon: Icon }) => (
                 <Card key={label}>
@@ -339,7 +402,7 @@ const JobDetail = () => {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-secondary/50">
-                        {['Nome', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews', 'Decisor', 'Cargo', 'LinkedIn', 'E-mail', 'Status', 'Fonte'].map(h => (
+                        {['Nome', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews', 'Decisor', 'Cargo', 'LinkedIn', 'E-mail', 'Lusha Email', 'Lusha Fone', 'Status', 'Fonte'].map(h => (
                           <th key={h} className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -347,7 +410,7 @@ const JobDetail = () => {
                     <tbody>
                       {filtered.length === 0 ? (
                         <tr>
-                          <td colSpan={12} className="px-3 py-12 text-center text-muted-foreground">
+                          <td colSpan={14} className="px-3 py-12 text-center text-muted-foreground">
                             {leads.length === 0 ? 'Aguardando leads...' : 'Nenhum resultado para a busca.'}
                           </td>
                         </tr>
@@ -377,6 +440,8 @@ const JobDetail = () => {
                           <td className="px-3 py-2 whitespace-nowrap">{l.decision_maker_role ?? '—'}</td>
                           <td className="px-3 py-2">{l.linkedin_url ? <a href={l.linkedin_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">Ver</a> : '—'}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{l.corporate_email ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{(l as any).lusha_email ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{(l as any).lusha_phone ?? '—'}</td>
                           <td className="px-3 py-2">
                             <Badge variant="outline" className={l.email_status === 'verified' ? 'text-green-400 border-green-400/30' : l.email_status === 'catch-all' ? 'text-yellow-400 border-yellow-400/30' : 'text-muted-foreground'}>
                               {l.email_status}
