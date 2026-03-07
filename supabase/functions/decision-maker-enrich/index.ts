@@ -8,7 +8,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 
-const PAGES_TO_TRY = ['/sobre', '/equipe', '/quem-somos', '/contato', '/about', '/team', '/about-us', '/nossa-equipe'];
+const PAGES_TO_TRY = [
+  '/sobre', '/equipe', '/quem-somos', '/contato', '/about', '/team', '/about-us',
+  '/nossa-equipe', '/empresa', '/institucional', '/a-empresa', '/quem-somos',
+  '/diretoria', '/governanca', '/leadership', '/management', '/nosso-time',
+  '/historia', '/about/team', '/about/leadership',
+];
 
 async function fetchPageText(baseUrl: string, path: string): Promise<{ text: string; url: string } | null> {
   const fullUrl = baseUrl.replace(/\/+$/, '') + path;
@@ -17,7 +22,11 @@ async function fetchPageText(baseUrl: string, path: string): Promise<{ text: str
     const timeout = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(fullUrl, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadEnricher/1.0)' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+      },
       redirect: 'follow',
     });
     clearTimeout(timeout);
