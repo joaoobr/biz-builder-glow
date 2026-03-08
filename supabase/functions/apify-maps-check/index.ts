@@ -269,19 +269,23 @@ Deno.serve(async (req) => {
 
     // ── Update job ──
     const now = new Date().toISOString();
+    const savedCount = cappedLeads.length;
+    const creditMsg = creditsRemaining <= 0 && leads.length > 0
+      ? ' (créditos esgotados — leads limitados)'
+      : '';
     await supabase.from('jobs').update({
       status: 'done',
       progress_step: 5,
-      progress_message: leads.length > 0
-        ? `Concluído — ${leads.length} leads via Apify (dedup de ${items.length} resultados)`
+      progress_message: savedCount > 0
+        ? `Concluído — ${savedCount} leads via Apify (dedup de ${items.length} resultados)${creditMsg}`
         : 'Concluído. 0 leads encontrados para os critérios.',
       finished_at: now,
     }).eq('id', jobId).eq('user_id', userId);
 
-    console.log(`[apify-check] done leads=${leads.length} elapsed=${Date.now() - start}ms`);
+    console.log(`[apify-check] done leads=${savedCount} (capped from ${leads.length}) elapsed=${Date.now() - start}ms`);
 
     return new Response(
-      JSON.stringify({ status: 'done', count: leads.length }),
+      JSON.stringify({ status: 'done', count: savedCount }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err: any) {
