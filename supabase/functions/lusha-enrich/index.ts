@@ -95,7 +95,9 @@ async function queryLusha(
         return {
           _companyData: true,
           companyName: companyData.name || companyData.companyName,
-          // Company endpoint doesn't return individual contacts
+          companyDescription: companyData.description || null,
+          companyEmployees: companyData.employees || null,
+          companyEmailDomain: companyData.emailDomain || null,
         };
       }
     } catch (err) {
