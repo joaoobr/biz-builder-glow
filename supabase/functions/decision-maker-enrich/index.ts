@@ -357,7 +357,7 @@ Deno.serve(async (req) => {
         // Update progress
         const elapsed = Math.round((Date.now() - start) / 1000);
         await supabase.from('jobs').update({
-          progress_message: `Etapa 3: ${i + 1}/${leads.length} pesquisados, ${updatedCount} decisores encontrados (${elapsed}s)`,
+          progress_message: `Etapa 3: ${i + 1}/${leads.length} pesquisados, ${updatedCount} decisores (${cacheHits} do cache) (${elapsed}s)`,
         }).eq('id', jobId);
 
         // Small delay between Perplexity calls to avoid rate limiting
