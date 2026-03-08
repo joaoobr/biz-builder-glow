@@ -571,7 +571,9 @@ const JobDetail = () => {
                           </td>
                           <td className="px-3 py-2">{l.source}</td>
                         </tr>
-                      ))}
+                        );
+                      })}
+
                     </tbody>
                   </table>
                 </div>
