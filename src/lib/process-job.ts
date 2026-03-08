@@ -115,6 +115,9 @@ export async function processJob(
 
       const { error } = await supabase.from('leads').insert(rows);
       if (error) throw error;
+
+      // Deduct credits server-side
+      await deductCredits(userId, leads.length);
     }
 
     if (leads.length === 0) {
