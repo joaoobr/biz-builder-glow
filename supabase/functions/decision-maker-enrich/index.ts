@@ -14,7 +14,7 @@ async function searchDecisionMaker(
   websiteUrl: string,
   apiKey: string,
 ): Promise<{ name: string; role: string; confidence: number; linkedin_url?: string; email?: string; phone?: string } | null> {
-  const query = `Quem é o principal decisor (dono, CEO, diretor, sócio-fundador, presidente) da empresa "${businessName}"? O site da empresa é ${websiteUrl}. Segmento: ${businessType}. Busque também no LinkedIn se possível.`;
+  const query = `Quem é o principal decisor (dono, CEO, diretor, sócio-fundador, presidente) da empresa "${businessName}"? O site da empresa é ${websiteUrl}. Segmento: ${businessType}. Busque no LinkedIn, Google, redes sociais e sites de registro empresarial (Econodata, Casa dos Dados, etc). Quero o máximo de informações de contato possível: LinkedIn, e-mail direto/corporativo e telefone.`;
 
   try {
     const res = await fetch(PERPLEXITY_API_URL, {
