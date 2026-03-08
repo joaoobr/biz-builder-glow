@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Zap, ArrowLeft, Users, CreditCard, Search, Shield, Ban } from 'lucide-react';
+import { Zap, ArrowLeft, Users, CreditCard, Search, Shield, Ban, Database, Brain, Globe, DollarSign } from 'lucide-react';
 
 interface AuthUser {
   id: string;
@@ -35,6 +35,14 @@ interface UserRow {
   blocked: boolean;
 }
 
+interface CacheStats {
+  businessCacheCount: number;
+  decisionMakerCacheCount: number;
+  lushaCacheCount: number;
+  estimatedSavingsPerplexity: number;
+  estimatedSavingsLusha: number;
+}
+
 const PLANS = [
   { value: 'free', label: 'Free (5)', credits: 5 },
   { value: 'starter', label: 'Starter (50)', credits: 50 },
@@ -49,6 +57,7 @@ const Admin = () => {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [search, setSearch] = useState('');
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setLoadingUsers(true);
@@ -135,9 +144,37 @@ const Admin = () => {
     setLoadingUsers(false);
   }, [toast]);
 
+  const fetchCacheStats = useCallback(async () => {
+    try {
+      const [bizRes, dmRes, lushaRes] = await Promise.all([
+        supabase.from('business_cache').select('id', { count: 'exact', head: true }),
+        supabase.from('decision_maker_cache').select('id', { count: 'exact', head: true }),
+        supabase.from('lusha_cache').select('id', { count: 'exact', head: true }),
+      ]);
+
+      const bizCount = bizRes.count || 0;
+      const dmCount = dmRes.count || 0;
+      const lushaCount = lushaRes.count || 0;
+
+      // Estimated savings: each Perplexity call ~$0.005, each Lusha call ~$0.10
+      setCacheStats({
+        businessCacheCount: bizCount,
+        decisionMakerCacheCount: dmCount,
+        lushaCacheCount: lushaCount,
+        estimatedSavingsPerplexity: dmCount * 0.005,
+        estimatedSavingsLusha: lushaCount * 0.10,
+      });
+    } catch (e) {
+      console.error('Failed to fetch cache stats', e);
+    }
+  }, []);
+
   useEffect(() => {
-    if (isAdmin) fetchUsers();
-  }, [isAdmin, fetchUsers]);
+    if (isAdmin) {
+      fetchUsers();
+      fetchCacheStats();
+    }
+  }, [isAdmin, fetchUsers, fetchCacheStats]);
 
   if (authLoading || adminLoading) {
     return (
@@ -223,7 +260,7 @@ const Admin = () => {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
-        {/* Metrics */}
+        {/* Platform Metrics */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           {[
             { label: 'Usuários', value: totalUsers, icon: Users },
@@ -244,6 +281,70 @@ const Admin = () => {
             </Card>
           ))}
         </div>
+
+        {/* Cache Stats */}
+        {cacheStats && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Database className="h-5 w-5 text-primary" />
+                Cache Inteligente
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-lg border border-border p-4 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">Empresas Cacheadas</p>
+                  </div>
+                  <p className="text-2xl font-bold font-heading">{cacheStats.businessCacheCount}</p>
+                  <p className="text-[10px] text-muted-foreground">websites já mapeados</p>
+                </div>
+                <div className="rounded-lg border border-border p-4 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">Decisores Cacheados</p>
+                  </div>
+                  <p className="text-2xl font-bold font-heading">{cacheStats.decisionMakerCacheCount}</p>
+                  <p className="text-[10px] text-muted-foreground">via Perplexity AI</p>
+                </div>
+                <div className="rounded-lg border border-border p-4 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">Contatos Lusha</p>
+                  </div>
+                  <p className="text-2xl font-bold font-heading">{cacheStats.lushaCacheCount}</p>
+                  <p className="text-[10px] text-muted-foreground">emails/telefones cacheados</p>
+                </div>
+                <div className="rounded-lg border border-border p-4 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-green-500" />
+                    <p className="text-xs text-muted-foreground">Economia Perplexity</p>
+                  </div>
+                  <p className="text-2xl font-bold font-heading text-green-500">
+                    ${cacheStats.estimatedSavingsPerplexity.toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">chamadas evitadas</p>
+                </div>
+                <div className="rounded-lg border border-border p-4 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-green-500" />
+                    <p className="text-xs text-muted-foreground">Economia Lusha</p>
+                  </div>
+                  <p className="text-2xl font-bold font-heading text-green-500">
+                    ${cacheStats.estimatedSavingsLusha.toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">créditos Lusha salvos</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Economia total estimada: <span className="font-medium text-green-500">${(cacheStats.estimatedSavingsPerplexity + cacheStats.estimatedSavingsLusha).toFixed(2)}</span> — 
+                dados compartilhados entre todos os tenants
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Users Table */}
         <Card>
