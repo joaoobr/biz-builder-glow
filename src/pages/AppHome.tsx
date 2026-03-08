@@ -299,7 +299,8 @@ const AppHome = () => {
               </div>
             </div>
           </CardContent>
-        </Card>
+          </Card>
+        )}
 
         {/* Progress indicator */}
         {processing && progressMsg && (
