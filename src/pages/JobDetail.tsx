@@ -28,6 +28,15 @@ const JobDetail = () => {
   const [enrichingWebsite, setEnrichingWebsite] = useState(false);
   const [enrichingDecisionMaker, setEnrichingDecisionMaker] = useState(false);
   const [enrichingLusha, setEnrichingLusha] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    minRating: '',
+    hasPhone: false,
+    hasWebsite: false,
+    hasEmail: false,
+    minScore: '',
+    category: '',
+  });
 
   const fetchData = async () => {
     if (!id || !user) return;
