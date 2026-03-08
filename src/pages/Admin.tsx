@@ -35,6 +35,14 @@ interface UserRow {
   blocked: boolean;
 }
 
+interface CacheStats {
+  businessCacheCount: number;
+  decisionMakerCacheCount: number;
+  lushaCacheCount: number;
+  estimatedSavingsPerplexity: number;
+  estimatedSavingsLusha: number;
+}
+
 const PLANS = [
   { value: 'free', label: 'Free (5)', credits: 5 },
   { value: 'starter', label: 'Starter (50)', credits: 50 },
