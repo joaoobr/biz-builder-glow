@@ -43,6 +43,32 @@ Deno.serve(async (req) => {
 
     const userId = userData.user.id;
 
+    // ── Credit check (server-side, service role) ──
+    const supabaseServiceKey = Deno.env.get('EXT_SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('EXT_SUPABASE_URL') || Deno.env.get('SUPABASE_URL')!;
+    const sbAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { data: creditData } = await sbAdmin
+      .from('user_credits')
+      .select('credits_total, credits_used, blocked')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!creditData) {
+      return new Response(
+        JSON.stringify({ error: 'Registro de créditos não encontrado.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const creditsRemaining = creditData.credits_total - creditData.credits_used;
+    if (creditData.blocked || creditsRemaining <= 0) {
+      return new Response(
+        JSON.stringify({ error: 'Créditos esgotados. Faça upgrade do seu plano para continuar.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     // ── Apify Token ──
     const apifyToken = Deno.env.get('APIFY_TOKEN');
     if (!apifyToken) {

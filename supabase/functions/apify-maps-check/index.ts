@@ -223,9 +223,23 @@ Deno.serve(async (req) => {
 
     console.log(`[apify-check] raw=${items.length} deduped=${leads.length} elapsed=${Date.now() - start}ms`);
 
-    // ── Insert leads (upsert to avoid duplicates) ──
-    if (leads.length > 0) {
-      const rows = leads.map(l => ({
+    // ── Credit check before inserting ──
+    const { data: creditData } = await supabase
+      .from('user_credits')
+      .select('credits_total, credits_used, blocked')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const creditsRemaining = creditData
+      ? creditData.credits_total - creditData.credits_used
+      : 0;
+
+    // Cap leads to remaining credits
+    const cappedLeads = creditsRemaining > 0 ? leads.slice(0, creditsRemaining) : [];
+
+    // ── Insert leads ──
+    if (cappedLeads.length > 0) {
+      const rows = cappedLeads.map(l => ({
         job_id: jobId,
         name: l.name,
         address: l.address,
@@ -242,6 +256,15 @@ Deno.serve(async (req) => {
         const { error: insertErr } = await supabase.from('leads').insert(batch);
         if (insertErr) throw new Error(`Insert failed: ${insertErr.message}`);
       }
+
+      // ── Deduct credits atomically (server-side) ──
+      await supabase
+        .from('user_credits')
+        .update({
+          credits_used: (creditData?.credits_used || 0) + cappedLeads.length,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
     }
 
     // ── Update job ──
