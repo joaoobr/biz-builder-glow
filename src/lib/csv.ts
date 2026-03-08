@@ -18,6 +18,7 @@ export interface Lead {
   corporate_email: string | null;
   email_status: string;
   source: string;
+  category_name?: string | null;
   created_at: string;
   lusha_email?: string | null;
   lusha_phone?: string | null;
