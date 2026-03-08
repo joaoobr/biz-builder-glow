@@ -224,6 +224,14 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Skip social media domains — they return the platform's own data, not the business
+        const SOCIAL_DOMAINS = ['instagram.com', 'facebook.com', 'twitter.com', 'x.com', 'linkedin.com', 'tiktok.com', 'youtube.com'];
+        if (SOCIAL_DOMAINS.some(d => domain === d || domain.endsWith('.' + d))) {
+          console.log(`[lusha-enrich] lead ${lead.id} (${lead.name}): social media domain (${domain}), skipping`);
+          await supabase.from('leads').update({ lusha_source: 'skipped_social' }).eq('id', lead.id);
+          continue;
+        }
+
         // Use decision_maker_name if available, otherwise search by domain only
         const personName = lead.decision_maker_name || '';
         const cacheKey = buildCacheKey(domain, personName);

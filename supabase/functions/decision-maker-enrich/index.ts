@@ -221,6 +221,17 @@ Deno.serve(async (req) => {
         }
 
         const baseUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+
+        // Skip social media URLs — can't extract decision makers from them
+        const SOCIAL_DOMAINS = ['instagram.com', 'facebook.com', 'twitter.com', 'x.com', 'linkedin.com', 'tiktok.com', 'youtube.com'];
+        try {
+          const hostname = new URL(baseUrl).hostname.replace(/^www\./, '');
+          if (SOCIAL_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d))) {
+            console.log(`[decision-maker] lead ${lead.id} (${lead.name}): social media URL (${hostname}), skipping`);
+            continue;
+          }
+        } catch { /* continue with URL as-is */ }
+
         console.log(`[decision-maker] lead ${lead.id} (${lead.name}): trying baseUrl=${baseUrl}`);
 
         // Try multiple pages
