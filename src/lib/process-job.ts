@@ -391,13 +391,17 @@ export async function resumeJobApifyMaps(
       }
 
       if (status === 'done') {
+        const leadsFound = checkData.count || 0;
+        if (leadsFound > 0 && userId) {
+          await deductCredits(userId, leadsFound);
+        }
         await updateJob(jobId, {
           status: 'done',
           progress_step: 5,
-          progress_message: `Concluído — ${checkData.count || 0} leads encontrados via Apify`,
+          progress_message: `Concluído — ${leadsFound} leads encontrados via Apify`,
           finished_at: new Date().toISOString(),
         });
-        return { success: true, count: checkData.count || 0 };
+        return { success: true, count: leadsFound };
       }
 
       if (status === 'failed') {
