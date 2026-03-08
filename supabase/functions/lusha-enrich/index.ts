@@ -40,28 +40,27 @@ async function queryLusha(
   firstName?: string,
   lastName?: string,
 ): Promise<any | null> {
-  const endpoints: string[] = [];
+  const endpoints: { url: string; type: string }[] = [];
 
-  // If we have firstName + lastName, use person endpoint with companyDomain
+  // Person endpoint requires firstName + lastName + companyDomain
   if (firstName && lastName) {
     const params = new URLSearchParams({
       firstName,
       lastName,
       companyDomain: domain,
     });
-    endpoints.push(`${LUSHA_API_URL}?${params.toString()}`);
+    endpoints.push({ url: `${LUSHA_API_URL}?${params.toString()}`, type: 'person' });
   }
 
-  // Always try company endpoint as fallback to find any contact
-  const companyParams = new URLSearchParams({ companyDomain: domain, limit: '1' });
-  endpoints.push(`https://api.lusha.com/v2/company?domain=${encodeURIComponent(domain)}`);
+  // Company endpoint as fallback — returns company info but may not have contacts
+  endpoints.push({ url: `https://api.lusha.com/v2/company?domain=${encodeURIComponent(domain)}`, type: 'company' });
 
-  for (const url of endpoints) {
+  for (const { url, type } of endpoints) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
 
-      console.log(`[lusha-enrich] Trying: ${url}`);
+      console.log(`[lusha-enrich] Trying (${type}): ${url}`);
 
       const res = await fetch(url, {
         method: 'GET',
@@ -78,23 +77,29 @@ async function queryLusha(
 
       if (!res.ok) {
         const body = await res.text().catch(() => '');
-        console.error(`[lusha-enrich] Lusha API error: ${res.status} ${body}`);
+        console.error(`[lusha-enrich] Lusha API error (${type}): ${res.status} ${body}`);
         continue;
       }
 
       const data = await res.json();
-      console.log(`[lusha-enrich] Response from ${url}: ${JSON.stringify(data).slice(0, 500)}`);
+      console.log(`[lusha-enrich] Response (${type}): ${JSON.stringify(data).slice(0, 500)}`);
       
-      if (data && (data.emailAddresses?.length || data.phoneNumbers?.length)) {
+      // Person endpoint returns direct contact data
+      if (type === 'person' && data && (data.emailAddresses?.length || data.phoneNumbers?.length)) {
         return data;
       }
 
-      // Company endpoint returns company-level data
-      if (url.includes('/v2/company') && data) {
-        return { _companyData: true, ...data };
+      // Company endpoint — extract contact info from company data if available
+      if (type === 'company' && data?.data) {
+        const companyData = data.data;
+        return {
+          _companyData: true,
+          companyName: companyData.name || companyData.companyName,
+          // Company endpoint doesn't return individual contacts
+        };
       }
     } catch (err) {
-      console.error(`[lusha-enrich] Lusha fetch error: ${err}`);
+      console.error(`[lusha-enrich] Lusha fetch error (${type}): ${err}`);
     }
   }
   
@@ -221,6 +226,14 @@ Deno.serve(async (req) => {
         if (!domain) {
           console.log(`[lusha-enrich] lead ${lead.id} (${lead.name}): invalid domain from ${rawUrl}, skipping`);
           await supabase.from('leads').update({ lusha_source: 'skipped' }).eq('id', lead.id);
+          continue;
+        }
+
+        // Skip social media domains — they return the platform's own data, not the business
+        const SOCIAL_DOMAINS = ['instagram.com', 'facebook.com', 'twitter.com', 'x.com', 'linkedin.com', 'tiktok.com', 'youtube.com'];
+        if (SOCIAL_DOMAINS.some(d => domain === d || domain.endsWith('.' + d))) {
+          console.log(`[lusha-enrich] lead ${lead.id} (${lead.name}): social media domain (${domain}), skipping`);
+          await supabase.from('leads').update({ lusha_source: 'skipped_social' }).eq('id', lead.id);
           continue;
         }
 
