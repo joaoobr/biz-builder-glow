@@ -75,27 +75,25 @@ Texto da página:
 ${pageText}`;
 
   try {
-    const res = await fetch(AI_GATEWAY_URL, {
+    const url = `${GEMINI_API_URL}?key=${apiKey}`;
+    const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 200,
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 200 },
       }),
     });
 
     if (!res.ok) {
-      console.error(`[decision-maker] AI error: ${res.status} ${await res.text()}`);
+      const errBody = await res.text();
+      console.error(`[decision-maker] Gemini API error: ${res.status} ${errBody}`);
       return null;
     }
 
     const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log(`[decision-maker] Gemini raw response: ${content}`);
     
     // Extract JSON from response
     const jsonMatch = content.match(/\{[\s\S]*?\}/);
