@@ -260,7 +260,7 @@ const Admin = () => {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
-        {/* Metrics */}
+        {/* Platform Metrics */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           {[
             { label: 'Usuários', value: totalUsers, icon: Users },
@@ -281,6 +281,70 @@ const Admin = () => {
             </Card>
           ))}
         </div>
+
+        {/* Cache Stats */}
+        {cacheStats && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Database className="h-5 w-5 text-primary" />
+                Cache Inteligente
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-lg border border-border p-4 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">Empresas Cacheadas</p>
+                  </div>
+                  <p className="text-2xl font-bold font-heading">{cacheStats.businessCacheCount}</p>
+                  <p className="text-[10px] text-muted-foreground">websites já mapeados</p>
+                </div>
+                <div className="rounded-lg border border-border p-4 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">Decisores Cacheados</p>
+                  </div>
+                  <p className="text-2xl font-bold font-heading">{cacheStats.decisionMakerCacheCount}</p>
+                  <p className="text-[10px] text-muted-foreground">via Perplexity AI</p>
+                </div>
+                <div className="rounded-lg border border-border p-4 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">Contatos Lusha</p>
+                  </div>
+                  <p className="text-2xl font-bold font-heading">{cacheStats.lushaCacheCount}</p>
+                  <p className="text-[10px] text-muted-foreground">emails/telefones cacheados</p>
+                </div>
+                <div className="rounded-lg border border-border p-4 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-green-500" />
+                    <p className="text-xs text-muted-foreground">Economia Perplexity</p>
+                  </div>
+                  <p className="text-2xl font-bold font-heading text-green-500">
+                    ${cacheStats.estimatedSavingsPerplexity.toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">chamadas evitadas</p>
+                </div>
+                <div className="rounded-lg border border-border p-4 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-green-500" />
+                    <p className="text-xs text-muted-foreground">Economia Lusha</p>
+                  </div>
+                  <p className="text-2xl font-bold font-heading text-green-500">
+                    ${cacheStats.estimatedSavingsLusha.toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">créditos Lusha salvos</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Economia total estimada: <span className="font-medium text-green-500">${(cacheStats.estimatedSavingsPerplexity + cacheStats.estimatedSavingsLusha).toFixed(2)}</span> — 
+                dados compartilhados entre todos os tenants
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Users Table */}
         <Card>
