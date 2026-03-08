@@ -305,11 +305,8 @@ export async function processJobApifyMaps(
       }
 
       if (status === 'done') {
-        // Deduct credits server-side
         const leadsFound = checkData.count || 0;
-        if (leadsFound > 0) {
-          await deductCredits(userId, leadsFound);
-        }
+        // Credits are now deducted server-side in apify-maps-check
         await updateJob(jobId, {
           status: 'done',
           progress_step: 5,
