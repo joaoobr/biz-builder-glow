@@ -239,7 +239,7 @@ Deno.serve(async (req) => {
           pagesFound++;
           console.log(`[decision-maker]   page found: ${page.url} (${page.text.length} chars)`);
 
-          const result = await extractDecisionMaker(page.text, lead.name, job.business_type || '', lovableApiKey);
+          const result = await extractDecisionMaker(page.text, lead.name, job.business_type || '', googleApiKey);
           console.log(`[decision-maker]   AI result for ${page.url}: ${JSON.stringify(result)}`);
           
           if (result && result.confidence > (bestResult?.confidence ?? 0)) {
