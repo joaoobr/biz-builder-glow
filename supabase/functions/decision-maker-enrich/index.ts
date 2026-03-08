@@ -269,9 +269,20 @@ Deno.serve(async (req) => {
             decision_maker_source_url: result.linkedin_url || baseUrl,
           };
 
-          // If Perplexity found a LinkedIn URL, also save it to linkedin_url field
+          // Save LinkedIn URL if found
           if (result.linkedin_url) {
             updateData.linkedin_url = result.linkedin_url;
+          }
+
+          // Save corporate email if found (only if not already set)
+          if (result.email) {
+            updateData.corporate_email = result.email;
+          }
+
+          // Save phone if found by Perplexity and lead has no phone yet
+          if (result.phone) {
+            // We'll update phone only if the lead doesn't have one from Google Maps
+            updateData.decision_maker_phone = result.phone;
           }
 
           const { error: updateErr } = await supabase
