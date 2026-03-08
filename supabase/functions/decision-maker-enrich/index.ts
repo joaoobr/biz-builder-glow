@@ -6,7 +6,17 @@ const corsHeaders = {
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+// Models to try in order — if one is quota-exhausted, fall back to next
+const GEMINI_MODELS = [
+  'gemini-2.0-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+];
+
+function geminiUrl(model: string) {
+  const ver = model.startsWith('gemini-1.5') ? 'v1' : 'v1beta';
+  return `https://generativelanguage.googleapis.com/${ver}/models/${model}:generateContent`;
+}
 
 const PAGES_TO_TRY = [
   '/sobre', '/equipe', '/quem-somos', '/contato', '/about', '/team', '/about-us',
