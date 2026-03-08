@@ -1,15 +1,19 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate, Link, useParams } from 'react-router-dom';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Download, Users, Globe, Mail, UserCheck, BarChart3, Search, Sparkles } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { ArrowLeft, Download, Users, Globe, Mail, UserCheck, BarChart3, Search, Sparkles, Filter, Star, TrendingUp } from 'lucide-react';
 import { Lead, exportLeadsToCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { resumeJobApifyMaps } from '@/lib/process-job';
+import { calcLeadScore, scoreLabel } from '@/lib/lead-score';
 
 const steps = ['Buscar empresas', 'Encontrar site', 'Pesquisar decisor', 'Encontrar e-mail', 'Exportar'];
 
