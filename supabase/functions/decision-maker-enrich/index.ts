@@ -84,43 +84,70 @@ Regras de confidence:
 Texto da página:
 ${pageText}`;
 
-  try {
-    const url = `${GEMINI_API_URL}?key=${apiKey}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 200 },
-      }),
-    });
+  // Try each model, with retry on 429
+  for (const model of GEMINI_MODELS) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const url = `${geminiUrl(model)}?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 200 },
+          }),
+        });
 
-    if (!res.ok) {
-      const errBody = await res.text();
-      console.error(`[decision-maker] Gemini API error: ${res.status} ${errBody}`);
-      return null;
+        if (res.status === 429) {
+          const errBody = await res.text();
+          console.warn(`[decision-maker] 429 on ${model} attempt ${attempt + 1}: ${errBody.slice(0, 200)}`);
+          // Check if quota is permanently 0 (limit: 0) → skip to next model
+          if (errBody.includes('limit: 0')) {
+            console.warn(`[decision-maker] ${model} quota is 0, trying next model`);
+            break; // break retry loop, try next model
+          }
+          // Temporary rate limit — wait and retry
+          const wait = Math.pow(2, attempt + 1) * 1000;
+          console.log(`[decision-maker] waiting ${wait}ms before retry`);
+          await new Promise(r => setTimeout(r, wait));
+          continue;
+        }
+
+        if (res.status === 404) {
+          console.warn(`[decision-maker] ${model} not found (404), trying next model`);
+          break;
+        }
+
+        if (!res.ok) {
+          const errBody = await res.text();
+          console.error(`[decision-maker] Gemini API error (${model}): ${res.status} ${errBody.slice(0, 300)}`);
+          return null;
+        }
+
+        const data = await res.json();
+        const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        console.log(`[decision-maker] ${model} response: ${content}`);
+
+        const jsonMatch = content.match(/\{[\s\S]*?\}/);
+        if (!jsonMatch) return null;
+
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (!parsed.name) return null;
+
+        return {
+          name: parsed.name,
+          role: parsed.role || 'Decisor',
+          confidence: Math.min(100, Math.max(0, parsed.confidence ?? 50)),
+        };
+      } catch (err) {
+        console.error(`[decision-maker] AI error (${model}, attempt ${attempt + 1}): ${err}`);
+        if (attempt === 2) break;
+      }
     }
-
-    const data = await res.json();
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    console.log(`[decision-maker] Gemini raw response: ${content}`);
-    
-    // Extract JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*?\}/);
-    if (!jsonMatch) return null;
-    
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (!parsed.name) return null;
-    
-    return {
-      name: parsed.name,
-      role: parsed.role || 'Decisor',
-      confidence: Math.min(100, Math.max(0, parsed.confidence ?? 50)),
-    };
-  } catch (err) {
-    console.error(`[decision-maker] AI parse error: ${err}`);
-    return null;
   }
+
+  console.error(`[decision-maker] All models exhausted for "${businessName}"`);
+  return null;
 }
 
 Deno.serve(async (req) => {
