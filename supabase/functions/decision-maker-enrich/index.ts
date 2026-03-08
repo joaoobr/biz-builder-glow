@@ -371,10 +371,10 @@ Deno.serve(async (req) => {
     const elapsed = Math.round((Date.now() - start) / 1000);
     await supabase.from('jobs').update({
       progress_step: 3,
-      progress_message: `Etapa 3 concluída — ${updatedCount} decisores encontrados em ${elapsed}s (via Perplexity AI)`,
+      progress_message: `Etapa 3 concluída — ${updatedCount} decisores encontrados (${cacheHits} do cache) em ${elapsed}s`,
     }).eq('id', jobId);
 
-    console.log(`[decision-maker] DONE updated=${updatedCount} elapsed=${Date.now() - start}ms`);
+    console.log(`[decision-maker] DONE updated=${updatedCount} cacheHits=${cacheHits} elapsed=${Date.now() - start}ms`);
 
     return new Response(
       JSON.stringify({ status: 'done', updatedCount }),
