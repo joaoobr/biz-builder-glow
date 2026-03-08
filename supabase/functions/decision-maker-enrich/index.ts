@@ -13,8 +13,8 @@ async function searchDecisionMaker(
   businessType: string,
   websiteUrl: string,
   apiKey: string,
-): Promise<{ name: string; role: string; confidence: number; linkedin_url?: string } | null> {
-  const query = `Quem é o principal decisor (dono, CEO, diretor, sócio-fundador, presidente) da empresa "${businessName}"? O site da empresa é ${websiteUrl}. Segmento: ${businessType}. Busque também no LinkedIn se possível.`;
+): Promise<{ name: string; role: string; confidence: number; linkedin_url?: string; email?: string; phone?: string } | null> {
+  const query = `Quem é o principal decisor (dono, CEO, diretor, sócio-fundador, presidente) da empresa "${businessName}"? O site da empresa é ${websiteUrl}. Segmento: ${businessType}. Busque no LinkedIn, Google, redes sociais e sites de registro empresarial (Econodata, Casa dos Dados, etc). Quero o máximo de informações de contato possível: LinkedIn, e-mail direto/corporativo e telefone.`;
 
   try {
     const res = await fetch(PERPLEXITY_API_URL, {
@@ -28,10 +28,10 @@ async function searchDecisionMaker(
         messages: [
           {
             role: 'system',
-            content: `Você é um assistente que encontra decisores de empresas brasileiras. Responda SOMENTE com JSON válido no formato:
-{"name": "Nome Completo", "role": "Cargo", "confidence": 85, "linkedin_url": "https://linkedin.com/in/..."}
+            content: `Você é um assistente especializado em encontrar decisores de empresas brasileiras e seus dados de contato. Responda SOMENTE com JSON válido no formato:
+{"name": "Nome Completo", "role": "Cargo", "confidence": 85, "linkedin_url": "https://linkedin.com/in/...", "email": "nome@empresa.com.br", "phone": "+55 47 99999-9999"}
 
-Se não encontrar, responda: {"name": null, "role": null, "confidence": 0}
+Se não encontrar nenhuma informação, responda: {"name": null, "role": null, "confidence": 0}
 
 Regras de confidence:
 - 90-100: Nome e cargo confirmados em múltiplas fontes (site + LinkedIn)
@@ -39,11 +39,14 @@ Regras de confidence:
 - 50-69: Nome encontrado mas cargo inferido
 - 0-49: Informação vaga ou ausente
 
-linkedin_url é opcional - inclua somente se encontrar o perfil real.`,
+Campos opcionais (inclua somente se encontrar dados reais, não invente):
+- linkedin_url: URL completa do perfil LinkedIn da pessoa (não da empresa)
+- email: e-mail direto da pessoa ou e-mail corporativo da empresa
+- phone: telefone direto, celular ou WhatsApp da pessoa`,
           },
           { role: 'user', content: query },
         ],
-        max_tokens: 300,
+        max_tokens: 500,
         temperature: 0.1,
       }),
     });
@@ -63,7 +66,7 @@ linkedin_url é opcional - inclua somente se encontrar o perfil real.`,
           messages: [
             {
               role: 'system',
-              content: `Responda SOMENTE com JSON: {"name": "Nome", "role": "Cargo", "confidence": 85, "linkedin_url": "url_ou_null"}. Se não encontrar: {"name": null, "role": null, "confidence": 0}`,
+              content: `Responda SOMENTE com JSON: {"name": "Nome", "role": "Cargo", "confidence": 85, "linkedin_url": "url_ou_null", "email": "email_ou_null", "phone": "telefone_ou_null"}. Se não encontrar: {"name": null, "role": null, "confidence": 0}`,
             },
             { role: 'user', content: query },
           ],
@@ -104,7 +107,7 @@ linkedin_url é opcional - inclua somente se encontrar o perfil real.`,
 function parseAIResponse(
   content: string,
   businessName: string,
-): { name: string; role: string; confidence: number; linkedin_url?: string } | null {
+): { name: string; role: string; confidence: number; linkedin_url?: string; email?: string; phone?: string } | null {
   try {
     // Extract JSON from response (may have surrounding text)
     const jsonMatch = content.match(/\{[\s\S]*?\}/);
@@ -121,6 +124,8 @@ function parseAIResponse(
       role: parsed.role || 'Decisor',
       confidence: Math.min(100, Math.max(0, parsed.confidence ?? 50)),
       linkedin_url: parsed.linkedin_url || undefined,
+      email: parsed.email || undefined,
+      phone: parsed.phone || undefined,
     };
   } catch (err) {
     console.error(`[decision-maker] JSON parse error for "${businessName}": ${err}`);
@@ -264,9 +269,19 @@ Deno.serve(async (req) => {
             decision_maker_source_url: result.linkedin_url || baseUrl,
           };
 
-          // If Perplexity found a LinkedIn URL, also save it to linkedin_url field
+          // Save LinkedIn URL if found
           if (result.linkedin_url) {
             updateData.linkedin_url = result.linkedin_url;
+          }
+
+          // Save corporate email if found (only if not already set)
+          if (result.email) {
+            updateData.corporate_email = result.email;
+          }
+
+          // Log phone found by Perplexity (Lusha step will handle phone enrichment)
+          if (result.phone) {
+            console.log(`[decision-maker] Found phone for ${lead.name}: ${result.phone}`);
           }
 
           const { error: updateErr } = await supabase
