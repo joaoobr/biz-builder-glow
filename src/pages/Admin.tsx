@@ -144,9 +144,37 @@ const Admin = () => {
     setLoadingUsers(false);
   }, [toast]);
 
+  const fetchCacheStats = useCallback(async () => {
+    try {
+      const [bizRes, dmRes, lushaRes] = await Promise.all([
+        supabase.from('business_cache').select('id', { count: 'exact', head: true }),
+        supabase.from('decision_maker_cache').select('id', { count: 'exact', head: true }),
+        supabase.from('lusha_cache').select('id', { count: 'exact', head: true }),
+      ]);
+
+      const bizCount = bizRes.count || 0;
+      const dmCount = dmRes.count || 0;
+      const lushaCount = lushaRes.count || 0;
+
+      // Estimated savings: each Perplexity call ~$0.005, each Lusha call ~$0.10
+      setCacheStats({
+        businessCacheCount: bizCount,
+        decisionMakerCacheCount: dmCount,
+        lushaCacheCount: lushaCount,
+        estimatedSavingsPerplexity: dmCount * 0.005,
+        estimatedSavingsLusha: lushaCount * 0.10,
+      });
+    } catch (e) {
+      console.error('Failed to fetch cache stats', e);
+    }
+  }, []);
+
   useEffect(() => {
-    if (isAdmin) fetchUsers();
-  }, [isAdmin, fetchUsers]);
+    if (isAdmin) {
+      fetchUsers();
+      fetchCacheStats();
+    }
+  }, [isAdmin, fetchUsers, fetchCacheStats]);
 
   if (authLoading || adminLoading) {
     return (
