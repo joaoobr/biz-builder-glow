@@ -219,6 +219,7 @@ Deno.serve(async (req) => {
 
         const domain = extractDomain(rawUrl);
         if (!domain) {
+          console.log(`[lusha-enrich] lead ${lead.id} (${lead.name}): invalid domain from ${rawUrl}, skipping`);
           await supabase.from('leads').update({ lusha_source: 'skipped' }).eq('id', lead.id);
           continue;
         }
@@ -226,6 +227,7 @@ Deno.serve(async (req) => {
         // Use decision_maker_name if available, otherwise search by domain only
         const personName = lead.decision_maker_name || '';
         const cacheKey = buildCacheKey(domain, personName);
+        console.log(`[lusha-enrich] lead ${lead.id} (${lead.name}): domain=${domain}, personName="${personName}", cacheKey=${cacheKey}`);
 
         // ── Step 1: Check cache ──
         const { data: cached } = await supabase
