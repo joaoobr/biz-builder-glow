@@ -133,22 +133,16 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('EXT_SUPABASE_URL') || Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('EXT_SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('EXT_SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY') || '';
+    const googleApiKey = Deno.env.get('GOOGLE_API_KEY') || '';
 
-    if (!lovableApiKey) {
-      console.error('[decision-maker] LOVABLE_API_KEY is not set!');
-      await supabase.from('jobs').update({
-        progress_message: 'Erro (Etapa 3): LOVABLE_API_KEY não configurada no Supabase.',
-      }).eq('id', jobId);
+    if (!googleApiKey) {
+      console.error('[decision-maker] GOOGLE_API_KEY is not set!');
       return new Response(
-        JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }),
+        JSON.stringify({ error: 'GOOGLE_API_KEY not configured. Set it in Supabase secrets.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
-
-    if (!lovableApiKey.startsWith('sk_')) {
-      console.error(`[decision-maker] LOVABLE_API_KEY has invalid format (length=${lovableApiKey.length}, prefix=${lovableApiKey.slice(0, 5)})`);
-    }
+    console.log(`[decision-maker] GOOGLE_API_KEY present, length=${googleApiKey.length}`);
 
     const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
