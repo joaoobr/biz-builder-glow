@@ -274,16 +274,47 @@ const JobDetail = () => {
     }
   };
 
-  const filtered = leads.filter(l =>
-    !search || Object.values(l).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))
+  // Score + filter logic
+  const leadsWithScore = useMemo(() =>
+    leads.map(l => ({ ...l, _score: calcLeadScore(l) })),
+    [leads]
   );
+
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    leads.forEach(l => { if (l.category_name) cats.add(l.category_name); });
+    return Array.from(cats).sort();
+  }, [leads]);
+
+  const filtered = useMemo(() => {
+    return leadsWithScore.filter(l => {
+      if (search && !Object.values(l).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))) return false;
+      if (filters.minRating && (Number(l.rating) || 0) < Number(filters.minRating)) return false;
+      if (filters.hasPhone && !l.phone) return false;
+      if (filters.hasWebsite && !(l.website || l.website_url)) return false;
+      if (filters.hasEmail && !(l.corporate_email || (l as any).lusha_email)) return false;
+      if (filters.minScore && l._score < Number(filters.minScore)) return false;
+      if (filters.category && l.category_name !== filters.category) return false;
+      return true;
+    });
+  }, [leadsWithScore, search, filters]);
 
   const withSite = leads.filter(l => l.website_url || l.website).length;
   const withEmail = leads.filter(l => l.corporate_email || (l as any).lusha_email).length;
   const withDecisionMaker = leads.filter(l => l.decision_maker_name).length;
   const withLusha = leads.filter(l => (l as any).lusha_source === 'lusha' || (l as any).lusha_source === 'cache').length;
   const fillRate = leads.length ? Math.round(((withSite + withEmail + withDecisionMaker) / (leads.length * 3)) * 100) : 0;
+  const avgScore = leadsWithScore.length ? Math.round(leadsWithScore.reduce((s, l) => s + l._score, 0) / leadsWithScore.length) : 0;
   const progressStep = job?.progress_step || 0;
+
+  const activeFilterCount = [
+    filters.minRating,
+    filters.hasPhone,
+    filters.hasWebsite,
+    filters.hasEmail,
+    filters.minScore,
+    filters.category,
+  ].filter(Boolean).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -334,44 +365,28 @@ const JobDetail = () => {
                   })}
                 </div>
 
-                {/* Status message - hide when leads already loaded */}
                 {job.progress_message && leads.length === 0 && isJobActive && (
                   <p className="text-sm text-muted-foreground mt-3">{job.progress_message}</p>
                 )}
 
-                <div className="mt-3 flex items-center gap-2">
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
                   <Badge className={job.status === 'done' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-destructive/20 text-destructive' : job.status === 'processing' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-primary/20 text-primary'}>
                     {job.status === 'done' ? '✓ Concluído' : job.status === 'failed' ? '✗ Falhou' : (job.status === 'running' || job.status === 'processing') && leads.length > 0 ? '✓ Concluído' : job.status === 'running' ? '⟳ Buscando...' : job.status}
                   </Badge>
                   {leads.length > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleEnrichWebsite}
-                      disabled={enrichingWebsite || enrichingDecisionMaker || enrichingLusha || isJobActive}
-                    >
+                    <Button variant="outline" size="sm" onClick={handleEnrichWebsite} disabled={enrichingWebsite || enrichingDecisionMaker || enrichingLusha || isJobActive}>
                       <Search className={`h-4 w-4 mr-1.5 ${enrichingWebsite ? 'animate-pulse' : ''}`} />
                       {enrichingWebsite ? 'Buscando sites...' : '2. Encontrar Site'}
                     </Button>
                   )}
                   {leads.length > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleEnrichDecisionMaker}
-                      disabled={enrichingDecisionMaker || enrichingWebsite || enrichingLusha || isJobActive}
-                    >
+                    <Button variant="outline" size="sm" onClick={handleEnrichDecisionMaker} disabled={enrichingDecisionMaker || enrichingWebsite || enrichingLusha || isJobActive}>
                       <UserCheck className={`h-4 w-4 mr-1.5 ${enrichingDecisionMaker ? 'animate-pulse' : ''}`} />
                       {enrichingDecisionMaker ? 'Pesquisando decisores...' : '3. Pesquisar Decisor'}
                     </Button>
                   )}
                   {leads.length > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleEnrichLusha}
-                      disabled={enrichingLusha || enrichingWebsite || enrichingDecisionMaker || isJobActive}
-                    >
+                    <Button variant="outline" size="sm" onClick={handleEnrichLusha} disabled={enrichingLusha || enrichingWebsite || enrichingDecisionMaker || isJobActive}>
                       <Sparkles className={`h-4 w-4 mr-1.5 ${enrichingLusha ? 'animate-pulse' : ''}`} />
                       {enrichingLusha ? 'Enriquecendo via Lusha...' : '4. Enriquecer (Lusha)'}
                     </Button>
@@ -389,6 +404,7 @@ const JobDetail = () => {
                 { label: 'Com Decisor', value: withDecisionMaker, icon: UserCheck },
                 { label: 'Lusha', value: withLusha, icon: Sparkles },
                 { label: 'Taxa Preench.', value: `${fillRate}%`, icon: BarChart3 },
+                { label: 'Score Médio', value: avgScore, icon: TrendingUp },
               ].map(({ label, value, icon: Icon }) => (
                 <Card key={label}>
                   <CardContent className="p-4 flex items-center gap-3">
@@ -404,12 +420,95 @@ const JobDetail = () => {
               ))}
             </div>
 
-            {/* Table */}
+            {/* Filters */}
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Leads ({filtered.length})</CardTitle>
-                <Input placeholder="Buscar..." className="max-w-xs h-9" value={search} onChange={e => setSearch(e.target.value)} />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  Leads ({filtered.length})
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary" className="text-xs">{activeFilterCount} filtro{activeFilterCount > 1 ? 's' : ''}</Badge>
+                  )}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Input placeholder="Buscar..." className="max-w-[200px] h-9" value={search} onChange={e => setSearch(e.target.value)} />
+                  <Button
+                    variant={showFilters ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setShowFilters(v => !v)}
+                  >
+                    <Filter className="h-4 w-4 mr-1" />
+                    Filtros
+                  </Button>
+                </div>
               </CardHeader>
+
+              {showFilters && (
+                <div className="px-6 pb-4">
+                  <div className="rounded-lg border border-border bg-secondary/30 p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Rating mínimo</Label>
+                      <Select value={filters.minRating} onValueChange={v => setFilters(f => ({ ...f, minRating: v === 'all' ? '' : v }))}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="Qualquer" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Qualquer</SelectItem>
+                          <SelectItem value="3">3+ ⭐</SelectItem>
+                          <SelectItem value="3.5">3.5+ ⭐</SelectItem>
+                          <SelectItem value="4">4+ ⭐</SelectItem>
+                          <SelectItem value="4.5">4.5+ ⭐</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Score mínimo</Label>
+                      <Select value={filters.minScore} onValueChange={v => setFilters(f => ({ ...f, minScore: v === 'all' ? '' : v }))}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="Qualquer" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Qualquer</SelectItem>
+                          <SelectItem value="20">20+ (Baixo)</SelectItem>
+                          <SelectItem value="40">40+ (Regular)</SelectItem>
+                          <SelectItem value="60">60+ (Bom)</SelectItem>
+                          <SelectItem value="80">80+ (Excelente)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {categories.length > 0 && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Categoria</Label>
+                        <Select value={filters.category} onValueChange={v => setFilters(f => ({ ...f, category: v === 'all' ? '' : v }))}>
+                          <SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todas</SelectItem>
+                            {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div className="flex items-end gap-4">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={filters.hasPhone} onCheckedChange={v => setFilters(f => ({ ...f, hasPhone: v }))} id="f-phone" />
+                        <Label htmlFor="f-phone" className="text-xs">Com telefone</Label>
+                      </div>
+                    </div>
+                    <div className="flex items-end gap-4">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={filters.hasWebsite} onCheckedChange={v => setFilters(f => ({ ...f, hasWebsite: v }))} id="f-site" />
+                        <Label htmlFor="f-site" className="text-xs">Com website</Label>
+                      </div>
+                    </div>
+                    <div className="flex items-end gap-4">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={filters.hasEmail} onCheckedChange={v => setFilters(f => ({ ...f, hasEmail: v }))} id="f-email" />
+                        <Label htmlFor="f-email" className="text-xs">Com e-mail</Label>
+                      </div>
+                    </div>
+                  </div>
+                  {activeFilterCount > 0 && (
+                    <Button variant="ghost" size="sm" className="mt-2 text-xs" onClick={() => setFilters({ minRating: '', hasPhone: false, hasWebsite: false, hasEmail: false, minScore: '', category: '' })}>
+                      Limpar filtros
+                    </Button>
+                  )}
+                </div>
+              )}
               <CardContent>
                 <div className="rounded-lg border border-border overflow-x-auto">
                   <table className="w-full text-sm">
