@@ -112,9 +112,33 @@ const JobDetail = () => {
     return () => clearTimeout(safetyTimer);
   }, [leads.length, isJobActive, id, user]);
 
+  // Score + filter logic (must be before early returns)
+  const leadsWithScore = useMemo(() =>
+    leads.map(l => ({ ...l, _score: calcLeadScore(l) })),
+    [leads]
+  );
+
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    leads.forEach(l => { if (l.category_name) cats.add(l.category_name); });
+    return Array.from(cats).sort();
+  }, [leads]);
+
+  const filtered = useMemo(() => {
+    return leadsWithScore.filter(l => {
+      if (search && !Object.values(l).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))) return false;
+      if (filters.minRating && (Number(l.rating) || 0) < Number(filters.minRating)) return false;
+      if (filters.hasPhone && !l.phone) return false;
+      if (filters.hasWebsite && !(l.website || l.website_url)) return false;
+      if (filters.hasEmail && !(l.corporate_email || l.lusha_email)) return false;
+      if (filters.minScore && l._score < Number(filters.minScore)) return false;
+      if (filters.category && l.category_name !== filters.category) return false;
+      return true;
+    });
+  }, [leadsWithScore, search, filters]);
+
   if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
   if (!user) return <Navigate to="/login" replace />;
-
 
   const handleExport = () => {
     if (leads.length === 0) {
