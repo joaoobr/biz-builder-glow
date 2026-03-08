@@ -62,13 +62,26 @@ const AppHome = () => {
       toast({ title: 'Preencha os campos obrigatórios', variant: 'destructive' });
       return;
     }
-    if (remaining <= 0) {
-      toast({ title: 'Créditos esgotados', description: 'Você não tem créditos suficientes. Entre em contato para upgrade.', variant: 'destructive' });
+
+    // Fresh credit check from DB before proceeding
+    const { data: freshCredits } = await supabase
+      .from('user_credits')
+      .select('credits_total, credits_used, blocked')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const freshRemaining = freshCredits ? freshCredits.credits_total - freshCredits.credits_used : 0;
+
+    if (!freshCredits || freshCredits.blocked || freshRemaining <= 0) {
+      toast({ title: 'Créditos esgotados', description: 'Você não tem créditos suficientes. Faça upgrade do seu plano.', variant: 'destructive' });
+      refetchCredits(); // Update UI to reflect
       return;
     }
-    const cappedQuantity = Math.min(form.quantity, remaining);
+
+    const cappedQuantity = Math.min(form.quantity, freshRemaining);
     if (cappedQuantity <= 0) {
       toast({ title: 'Sem créditos disponíveis', variant: 'destructive' });
+      refetchCredits();
       return;
     }
     setCreating(true);
