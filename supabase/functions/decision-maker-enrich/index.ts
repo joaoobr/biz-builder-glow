@@ -13,7 +13,7 @@ async function searchDecisionMaker(
   businessType: string,
   websiteUrl: string,
   apiKey: string,
-): Promise<{ name: string; role: string; confidence: number; linkedin_url?: string } | null> {
+): Promise<{ name: string; role: string; confidence: number; linkedin_url?: string; email?: string; phone?: string } | null> {
   const query = `Quem é o principal decisor (dono, CEO, diretor, sócio-fundador, presidente) da empresa "${businessName}"? O site da empresa é ${websiteUrl}. Segmento: ${businessType}. Busque também no LinkedIn se possível.`;
 
   try {
