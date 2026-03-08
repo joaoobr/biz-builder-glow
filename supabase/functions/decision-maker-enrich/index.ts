@@ -46,7 +46,7 @@ Campos opcionais (inclua somente se encontrar dados reais, não invente):
           },
           { role: 'user', content: query },
         ],
-        max_tokens: 300,
+        max_tokens: 500,
         temperature: 0.1,
       }),
     });
