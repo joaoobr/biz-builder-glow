@@ -228,6 +228,8 @@ Deno.serve(async (req) => {
 
     let updatedCount = 0;
 
+    let cacheHits = 0;
+
     if (leads && leads.length > 0) {
       for (let i = 0; i < leads.length; i++) {
         const lead = leads[i];
@@ -239,25 +241,81 @@ Deno.serve(async (req) => {
 
         const baseUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
 
+        // Extract domain for cache lookup
+        let domain = '';
+        try {
+          domain = new URL(baseUrl).hostname.replace(/^www\./, '').toLowerCase();
+        } catch { domain = rawUrl.replace(/^(https?:\/\/)?(www\.)?/i, '').split('/')[0].toLowerCase(); }
+
         // Skip social media URLs
         const SOCIAL_DOMAINS = ['instagram.com', 'facebook.com', 'twitter.com', 'x.com', 'linkedin.com', 'tiktok.com', 'youtube.com'];
-        try {
-          const hostname = new URL(baseUrl).hostname.replace(/^www\./, '');
-          if (SOCIAL_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d))) {
-            console.log(`[decision-maker] lead ${lead.id} (${lead.name}): social media URL (${hostname}), skipping`);
-            continue;
+        if (SOCIAL_DOMAINS.some(d => domain === d || domain.endsWith('.' + d))) {
+          console.log(`[decision-maker] lead ${lead.id} (${lead.name}): social media URL (${domain}), skipping`);
+          continue;
+        }
+
+        // ── CHECK CACHE FIRST ──
+        let result: { name: string; role: string; confidence: number; linkedin_url?: string; email?: string; phone?: string } | null = null;
+
+        if (domain) {
+          const { data: cached } = await supabase
+            .from('decision_maker_cache')
+            .select('*')
+            .eq('domain', domain)
+            .gt('confidence', 50)
+            .order('confidence', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (cached) {
+            console.log(`[decision-maker] CACHE HIT for ${domain}: ${cached.name} (${cached.role}), confidence=${cached.confidence}`);
+            result = {
+              name: cached.name,
+              role: cached.role,
+              confidence: cached.confidence,
+              linkedin_url: cached.linkedin_url || undefined,
+              email: cached.email || undefined,
+              phone: cached.phone || undefined,
+            };
+            cacheHits++;
           }
-        } catch { /* continue with URL as-is */ }
+        }
 
-        console.log(`[decision-maker] lead ${lead.id} (${lead.name}): searching via Perplexity, website=${baseUrl}`);
+        // ── CALL PERPLEXITY IF NO CACHE ──
+        if (!result) {
+          console.log(`[decision-maker] lead ${lead.id} (${lead.name}): searching via Perplexity, website=${baseUrl}`);
 
-        // Use Perplexity to search for decision maker (no scraping needed!)
-        const result = await searchDecisionMaker(
-          lead.name,
-          job.business_type || '',
-          baseUrl,
-          perplexityApiKey,
-        );
+          result = await searchDecisionMaker(
+            lead.name,
+            job.business_type || '',
+            baseUrl,
+            perplexityApiKey,
+          );
+
+          // Save to cache for future use by any user
+          if (result && result.confidence > 0 && domain) {
+            const { error: cacheErr } = await supabase
+              .from('decision_maker_cache')
+              .upsert({
+                domain,
+                business_name: lead.name,
+                name: result.name,
+                role: result.role,
+                confidence: result.confidence,
+                linkedin_url: result.linkedin_url || null,
+                email: result.email || null,
+                phone: result.phone || null,
+                source: 'perplexity',
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'domain' });
+
+            if (cacheErr) {
+              console.warn(`[decision-maker] cache save failed for ${domain}: ${cacheErr.message}`);
+            } else {
+              console.log(`[decision-maker] cached decision maker for ${domain}`);
+            }
+          }
+        }
 
         console.log(`[decision-maker] lead ${lead.id}: result=${JSON.stringify(result)}`);
 
