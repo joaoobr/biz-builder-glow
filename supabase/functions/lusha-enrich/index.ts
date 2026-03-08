@@ -192,7 +192,7 @@ Deno.serve(async (req) => {
 
     if (leadsErr) throw new Error(`Failed to fetch leads: ${leadsErr.message}`);
 
-    console.log(`[lusha-enrich] jobId=${jobId} leadsToEnrich=${leads?.length ?? 0}`);
+    console.log(`[lusha-enrich] jobId=${jobId} leadsToEnrich=${leads?.length ?? 0} lushaApiKey present: ${!!lushaApiKey}, length: ${lushaApiKey?.length ?? 0}`);
 
     await supabase.from('jobs').update({
       status: 'running',
