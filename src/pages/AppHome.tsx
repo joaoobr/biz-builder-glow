@@ -189,6 +189,9 @@ const AppHome = () => {
                   {credits.plan_name}
                 </Badge>
               </div>
+              <Button variant="outline" size="sm" asChild className="text-xs">
+                <Link to="/plans"><Crown className="h-3.5 w-3.5 mr-1" />Upgrade</Link>
+              </Button>
             </div>
           )}
         </div>
