@@ -107,7 +107,7 @@ Campos opcionais (inclua somente se encontrar dados reais, não invente):
 function parseAIResponse(
   content: string,
   businessName: string,
-): { name: string; role: string; confidence: number; linkedin_url?: string } | null {
+): { name: string; role: string; confidence: number; linkedin_url?: string; email?: string; phone?: string } | null {
   try {
     // Extract JSON from response (may have surrounding text)
     const jsonMatch = content.match(/\{[\s\S]*?\}/);
@@ -124,6 +124,8 @@ function parseAIResponse(
       role: parsed.role || 'Decisor',
       confidence: Math.min(100, Math.max(0, parsed.confidence ?? 50)),
       linkedin_url: parsed.linkedin_url || undefined,
+      email: parsed.email || undefined,
+      phone: parsed.phone || undefined,
     };
   } catch (err) {
     console.error(`[decision-maker] JSON parse error for "${businessName}": ${err}`);
