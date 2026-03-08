@@ -93,6 +93,7 @@ export async function processJob(
   businessType: string,
   locationText: string,
   quantity: number,
+  userId: string,
 ) {
   try {
     await updateJob(jobId, {
