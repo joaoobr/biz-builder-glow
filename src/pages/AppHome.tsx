@@ -109,22 +109,14 @@ const AppHome = () => {
       if (form.source === 'Apify') {
         result = await processJobApifyMaps(data.id, form.business_type, form.location, cappedQuantity, user.id);
       } else {
-        result = await processJob(data.id, form.business_type, form.location, cappedQuantity);
+        result = await processJob(data.id, form.business_type, form.location, cappedQuantity, user.id);
       }
       clearInterval(pollInterval);
 
+      // Credits are now deducted inside process-job, just refetch to update UI
+      refetchCredits();
+
       if (result.success && result.count) {
-        const { error: creditErr } = await supabase
-          .from('user_credits')
-          .update({
-            credits_used: (credits?.credits_used || 0) + result.count,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', user.id);
-        if (creditErr) {
-          console.error('[credits] Failed to update credits:', creditErr.message);
-        }
-        refetchCredits();
         toast({ title: `Concluído! ${result.count} leads encontrados. (${result.count} créditos consumidos)` });
       } else if (result.success) {
         toast({ title: 'Concluído!' });
