@@ -57,6 +57,7 @@ const Admin = () => {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [search, setSearch] = useState('');
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setLoadingUsers(true);
