@@ -192,6 +192,7 @@ Deno.serve(async (req) => {
     if (leadsErr) throw new Error(`Failed to fetch leads: ${leadsErr.message}`);
 
     console.log(`[decision-maker] jobId=${jobId} leadsToEnrich=${leads?.length ?? 0}`);
+    console.log(`[decision-maker] LOVABLE_API_KEY present: ${!!lovableApiKey}, length: ${lovableApiKey?.length ?? 0}`);
 
     await supabase.from('jobs').update({
       status: 'running',
@@ -200,29 +201,48 @@ Deno.serve(async (req) => {
     }).eq('id', jobId);
 
     let updatedCount = 0;
+    let pagesFound = 0;
+    let pagesTriedTotal = 0;
 
     if (leads && leads.length > 0) {
       for (let i = 0; i < leads.length; i++) {
         const lead = leads[i];
         const rawUrl = (lead.website_url || '').trim();
-        if (!rawUrl) continue;
+        if (!rawUrl) {
+          console.log(`[decision-maker] lead ${lead.id} (${lead.name}): no website_url, skipping`);
+          continue;
+        }
 
         const baseUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+        console.log(`[decision-maker] lead ${lead.id} (${lead.name}): trying baseUrl=${baseUrl}`);
 
         // Try multiple pages
         let bestResult: { name: string; role: string; confidence: number; sourceUrl: string } | null = null;
+        let pagesTriedForLead = 0;
 
         for (const path of ['', ...PAGES_TO_TRY]) {
+          pagesTriedTotal++;
+          pagesTriedForLead++;
           const page = await fetchPageText(baseUrl, path);
-          if (!page) continue;
+          if (!page) {
+            if (path === '') console.log(`[decision-maker]   homepage fetch failed for ${baseUrl}`);
+            continue;
+          }
+
+          pagesFound++;
+          console.log(`[decision-maker]   page found: ${page.url} (${page.text.length} chars)`);
 
           const result = await extractDecisionMaker(page.text, lead.name, job.business_type || '', lovableApiKey);
+          console.log(`[decision-maker]   AI result for ${page.url}: ${JSON.stringify(result)}`);
+          
           if (result && result.confidence > (bestResult?.confidence ?? 0)) {
             bestResult = { ...result, sourceUrl: page.url };
           }
           // Stop if we found a high-confidence match
           if (bestResult && bestResult.confidence >= 80) break;
         }
+
+        console.log(`[decision-maker] lead ${lead.id}: tried ${pagesTriedForLead} paths, bestResult=${JSON.stringify(bestResult)}`);
 
         if (bestResult && bestResult.confidence > 0) {
           const { error: updateErr } = await supabase
