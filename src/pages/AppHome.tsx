@@ -109,22 +109,14 @@ const AppHome = () => {
       if (form.source === 'Apify') {
         result = await processJobApifyMaps(data.id, form.business_type, form.location, cappedQuantity, user.id);
       } else {
-        result = await processJob(data.id, form.business_type, form.location, cappedQuantity);
+        result = await processJob(data.id, form.business_type, form.location, cappedQuantity, user.id);
       }
       clearInterval(pollInterval);
 
+      // Credits are now deducted inside process-job, just refetch to update UI
+      refetchCredits();
+
       if (result.success && result.count) {
-        const { error: creditErr } = await supabase
-          .from('user_credits')
-          .update({
-            credits_used: (credits?.credits_used || 0) + result.count,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', user.id);
-        if (creditErr) {
-          console.error('[credits] Failed to update credits:', creditErr.message);
-        }
-        refetchCredits();
         toast({ title: `Concluído! ${result.count} leads encontrados. (${result.count} créditos consumidos)` });
       } else if (result.success) {
         toast({ title: 'Concluído!' });
@@ -202,7 +194,7 @@ const AppHome = () => {
         </div>
 
         {/* New Job Form */}
-        <Card>
+        <Card className={remaining <= 0 ? 'opacity-60 pointer-events-none' : ''}>
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2 text-base">
               <Plus className="h-4 w-4 text-primary" />
@@ -210,6 +202,11 @@ const AppHome = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {remaining <= 0 && (
+              <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                🚫 Seus créditos acabaram. Entre em contato para fazer upgrade do plano.
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
               <div className="space-y-1.5 lg:col-span-2">
                 <Label className="text-xs">Tipo de Negócio *</Label>
@@ -218,6 +215,7 @@ const AppHome = () => {
                   value={form.business_type}
                   onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}
                   className="h-9"
+                  disabled={remaining <= 0}
                 />
               </div>
               <div className="space-y-1.5 lg:col-span-2">
@@ -227,6 +225,7 @@ const AppHome = () => {
                   value={form.location}
                   onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
                   className="h-9"
+                  disabled={remaining <= 0}
                 />
               </div>
               <div className="space-y-1.5">
@@ -238,6 +237,7 @@ const AppHome = () => {
                   value={form.quantity}
                   onChange={e => setForm(f => ({ ...f, quantity: Math.min(parseInt(e.target.value) || 0, remaining) }))}
                   className="h-9"
+                  disabled={remaining <= 0}
                 />
               </div>
               <div className="space-y-1.5">
@@ -249,11 +249,12 @@ const AppHome = () => {
                   value={form.radius_km}
                   onChange={e => setForm(f => ({ ...f, radius_km: parseInt(e.target.value) || 10 }))}
                   className="h-9"
+                  disabled={remaining <= 0}
                 />
               </div>
               <div className="space-y-1.5 lg:col-span-2">
                 <Label className="text-xs">Fonte</Label>
-                <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v }))}>
+                <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v }))} disabled={remaining <= 0}>
                   <SelectTrigger className="h-9">
                     <SelectValue />
                   </SelectTrigger>
@@ -265,9 +266,9 @@ const AppHome = () => {
                 </Select>
               </div>
               <div className="flex items-end lg:col-span-4">
-                <Button onClick={handleCreate} disabled={creating || processing} className="h-9 px-6">
+                <Button onClick={handleCreate} disabled={creating || processing || remaining <= 0} className="h-9 px-6">
                   <Zap className="h-4 w-4 mr-1.5" />
-                  {creating ? 'Criando...' : processing ? 'Processando...' : 'Iniciar Busca'}
+                  {remaining <= 0 ? 'Sem Créditos' : creating ? 'Criando...' : processing ? 'Processando...' : 'Iniciar Busca'}
                 </Button>
               </div>
             </div>

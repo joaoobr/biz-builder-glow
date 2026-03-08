@@ -16,6 +16,38 @@ function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/** Check remaining credits; throws if insufficient */
+async function checkCredits(userId: string, requested: number) {
+  const { data } = await supabase
+    .from('user_credits')
+    .select('credits_total, credits_used')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!data) throw new Error('Registro de créditos não encontrado.');
+  const remaining = data.credits_total - data.credits_used;
+  if (remaining <= 0) throw new Error('Créditos esgotados. Faça upgrade do seu plano.');
+  return Math.min(requested, remaining);
+}
+
+/** Deduct credits after successful lead insertion */
+async function deductCredits(userId: string, count: number) {
+  // Use rpc or atomic update to avoid race conditions
+  const { data } = await supabase
+    .from('user_credits')
+    .select('credits_used')
+    .eq('user_id', userId)
+    .single();
+  if (data) {
+    await supabase
+      .from('user_credits')
+      .update({
+        credits_used: data.credits_used + count,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+  }
+}
+
 async function fetchWithRetry(
   url: string,
   headers: Record<string, string> = {},
@@ -61,6 +93,7 @@ export async function processJob(
   businessType: string,
   locationText: string,
   quantity: number,
+  userId: string,
 ) {
   try {
     await updateJob(jobId, {
@@ -115,6 +148,9 @@ export async function processJob(
 
       const { error } = await supabase.from('leads').insert(rows);
       if (error) throw error;
+
+      // Deduct credits server-side
+      await deductCredits(userId, leads.length);
     }
 
     if (leads.length === 0) {
@@ -269,14 +305,18 @@ export async function processJobApifyMaps(
       }
 
       if (status === 'done') {
-        // Ensure the final progress message isn't overwritten by a stale client update
+        // Deduct credits server-side
+        const leadsFound = checkData.count || 0;
+        if (leadsFound > 0) {
+          await deductCredits(userId, leadsFound);
+        }
         await updateJob(jobId, {
           status: 'done',
           progress_step: 5,
-          progress_message: `Concluído — ${checkData.count || 0} leads encontrados via Apify`,
+          progress_message: `Concluído — ${leadsFound} leads encontrados via Apify`,
           finished_at: new Date().toISOString(),
         });
-        return { success: true, count: checkData.count || 0 };
+        return { success: true, count: leadsFound };
       }
 
       if (status === 'failed') {
@@ -312,6 +352,7 @@ export async function resumeJobApifyMaps(
   jobId: string,
   apifyRunId: string,
   quantity: number,
+  userId?: string,
 ) {
   try {
     await updateJob(jobId, {
@@ -350,13 +391,17 @@ export async function resumeJobApifyMaps(
       }
 
       if (status === 'done') {
+        const leadsFound = checkData.count || 0;
+        if (leadsFound > 0 && userId) {
+          await deductCredits(userId, leadsFound);
+        }
         await updateJob(jobId, {
           status: 'done',
           progress_step: 5,
-          progress_message: `Concluído — ${checkData.count || 0} leads encontrados via Apify`,
+          progress_message: `Concluído — ${leadsFound} leads encontrados via Apify`,
           finished_at: new Date().toISOString(),
         });
-        return { success: true, count: checkData.count || 0 };
+        return { success: true, count: leadsFound };
       }
 
       if (status === 'failed') {
