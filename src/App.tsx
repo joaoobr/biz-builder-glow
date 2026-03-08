@@ -12,6 +12,7 @@ import JobDetail from "./pages/JobDetail";
 import SettingsPage from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
+import Plans from "./pages/Plans";
 
 const queryClient = new QueryClient();
 
