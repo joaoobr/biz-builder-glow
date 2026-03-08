@@ -94,11 +94,41 @@ Deno.serve(async (req) => {
 
     let updatedCount = 0;
 
+    let cacheHits = 0;
+
     if (leads && leads.length > 0) {
       for (const lead of leads) {
         const rawUrl = (lead.website || '').trim();
         if (!rawUrl) continue;
 
+        // ── CHECK business_cache FIRST ──
+        // Normalize business name for lookup
+        const normalizedName = lead.name.toLowerCase().trim();
+        const { data: cached } = await supabase
+          .from('business_cache')
+          .select('*')
+          .eq('business_name_normalized', normalizedName)
+          .maybeSingle();
+
+        if (cached && cached.website_url) {
+          console.log(`[website-enrich] CACHE HIT for "${lead.name}": ${cached.website_url} (confidence=${cached.website_confidence})`);
+          const { error: updateErr } = await supabase
+            .from('leads')
+            .update({
+              website_url: cached.website_url,
+              website_source: cached.website_source || 'CACHE',
+              website_confidence: cached.website_confidence || 80,
+            })
+            .eq('id', lead.id);
+
+          if (!updateErr) {
+            updatedCount++;
+            cacheHits++;
+          }
+          continue;
+        }
+
+        // ── ORIGINAL ENRICHMENT LOGIC ──
         // Clean and validate URL
         let cleanUrl = rawUrl
           .replace(/^https?:\/\//i, '')
@@ -120,15 +150,11 @@ Deno.serve(async (req) => {
         let source = 'APIFY';
 
         if (!isDirectory) {
-          // Has its own domain — high confidence
           confidence = 90;
-
-          // Boost if name appears in domain
           const nameParts = lead.name.toLowerCase().split(/\s+/).filter((p: string) => p.length > 3);
           const domainMatchesName = nameParts.some((part: string) => cleanUrl.includes(part));
           if (domainMatchesName) confidence = 95;
         } else {
-          // It's a social/directory link — lower confidence
           confidence = 30;
           source = 'APIFY_SOCIAL';
         }
@@ -149,6 +175,25 @@ Deno.serve(async (req) => {
 
         updatedCount++;
 
+        // ── SAVE TO business_cache ──
+        if (!isDirectory && confidence >= 80) {
+          const { error: cacheErr } = await supabase
+            .from('business_cache')
+            .upsert({
+              business_name_normalized: normalizedName,
+              business_name: lead.name,
+              address: lead.address || null,
+              website_url: rawUrl,
+              website_source: source,
+              website_confidence: confidence,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'business_name_normalized' });
+
+          if (cacheErr) {
+            console.warn(`[website-enrich] cache save failed for "${lead.name}": ${cacheErr.message}`);
+          }
+        }
+
         // Update progress every 10 leads
         if (updatedCount % 10 === 0) {
           const elapsed = Math.round((Date.now() - start) / 1000);
@@ -163,10 +208,10 @@ Deno.serve(async (req) => {
     const elapsed = Math.round((Date.now() - start) / 1000);
     await supabase.from('jobs').update({
       progress_step: 2,
-      progress_message: `Etapa 2 concluída — ${updatedCount} sites encontrados em ${elapsed}s`,
+      progress_message: `Etapa 2 concluída — ${updatedCount} sites encontrados (${cacheHits} do cache) em ${elapsed}s`,
     }).eq('id', jobId);
 
-    console.log(`[website-enrich] done updated=${updatedCount} elapsed=${Date.now() - start}ms`);
+    console.log(`[website-enrich] done updated=${updatedCount} cacheHits=${cacheHits} elapsed=${Date.now() - start}ms`);
 
     return new Response(
       JSON.stringify({ status: 'done', updatedCount }),
