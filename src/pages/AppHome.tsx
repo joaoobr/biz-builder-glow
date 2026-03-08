@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, LogOut, History, Settings, Zap, Shield, CreditCard } from 'lucide-react';
+import { Plus, LogOut, History, Settings, Zap, Shield, CreditCard, Crown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { processJob, processJobApifyMaps } from '@/lib/process-job';
 import MetricsBar from '@/components/MetricsBar';
