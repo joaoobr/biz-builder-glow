@@ -16,6 +16,38 @@ function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/** Check remaining credits; throws if insufficient */
+async function checkCredits(userId: string, requested: number) {
+  const { data } = await supabase
+    .from('user_credits')
+    .select('credits_total, credits_used')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!data) throw new Error('Registro de créditos não encontrado.');
+  const remaining = data.credits_total - data.credits_used;
+  if (remaining <= 0) throw new Error('Créditos esgotados. Faça upgrade do seu plano.');
+  return Math.min(requested, remaining);
+}
+
+/** Deduct credits after successful lead insertion */
+async function deductCredits(userId: string, count: number) {
+  // Use rpc or atomic update to avoid race conditions
+  const { data } = await supabase
+    .from('user_credits')
+    .select('credits_used')
+    .eq('user_id', userId)
+    .single();
+  if (data) {
+    await supabase
+      .from('user_credits')
+      .update({
+        credits_used: data.credits_used + count,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+  }
+}
+
 async function fetchWithRetry(
   url: string,
   headers: Record<string, string> = {},
