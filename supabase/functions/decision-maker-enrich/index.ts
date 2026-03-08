@@ -6,7 +6,7 @@ const corsHeaders = {
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 const PAGES_TO_TRY = [
   '/sobre', '/equipe', '/quem-somos', '/contato', '/about', '/team', '/about-us',
