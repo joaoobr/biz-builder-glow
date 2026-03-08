@@ -515,7 +515,7 @@ const JobDetail = () => {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-secondary/50">
-                        {['Nome', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews', 'Decisor', 'Cargo', 'LinkedIn', 'E-mail', 'Lusha Email', 'Lusha Fone', 'Status', 'Fonte'].map(h => (
+                        {['Score', 'Nome', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews', 'Categoria', 'Decisor', 'Cargo', 'LinkedIn', 'E-mail', 'Lusha Email', 'Lusha Fone', 'Status', 'Fonte'].map(h => (
                           <th key={h} className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -523,12 +523,20 @@ const JobDetail = () => {
                     <tbody>
                       {filtered.length === 0 ? (
                         <tr>
-                          <td colSpan={14} className="px-3 py-12 text-center text-muted-foreground">
-                            {leads.length === 0 ? 'Aguardando leads...' : 'Nenhum resultado para a busca.'}
+                          <td colSpan={16} className="px-3 py-12 text-center text-muted-foreground">
+                            {leads.length === 0 ? 'Aguardando leads...' : 'Nenhum resultado para os filtros.'}
                           </td>
                         </tr>
-                      ) : filtered.map(l => (
+                      ) : filtered.map(l => {
+                        const sc = scoreLabel(l._score);
+                        return (
                         <tr key={l.id} className="border-b border-border hover:bg-secondary/30 transition-colors">
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <div className={`h-2 w-2 rounded-full ${l._score >= 80 ? 'bg-green-400' : l._score >= 60 ? 'bg-emerald-400' : l._score >= 40 ? 'bg-yellow-400' : l._score >= 20 ? 'bg-orange-400' : 'bg-red-400'}`} />
+                              <span className={`text-xs font-semibold ${sc.color}`}>{l._score}</span>
+                            </div>
+                          </td>
                           <td className="px-3 py-2 whitespace-nowrap font-medium">{l.name}</td>
                           <td className="px-3 py-2 max-w-[200px] truncate">{l.address}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{l.phone}</td>
@@ -547,14 +555,15 @@ const JobDetail = () => {
                               </span>
                             );
                           })()}</td>
-                          <td className="px-3 py-2">{l.rating ?? '—'}</td>
+                          <td className="px-3 py-2">{l.rating ? <span className="flex items-center gap-1"><Star className="h-3 w-3 text-yellow-400 fill-yellow-400" />{l.rating}</span> : '—'}</td>
                           <td className="px-3 py-2">{l.reviews_count ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-xs">{l.category_name ?? '—'}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{l.decision_maker_name ?? '—'}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{l.decision_maker_role ?? '—'}</td>
                           <td className="px-3 py-2">{l.linkedin_url ? <a href={l.linkedin_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">Ver</a> : '—'}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{l.corporate_email ?? '—'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{(l as any).lusha_email ?? '—'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{(l as any).lusha_phone ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{l.lusha_email ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{l.lusha_phone ?? '—'}</td>
                           <td className="px-3 py-2">
                             <Badge variant="outline" className={l.email_status === 'verified' ? 'text-green-400 border-green-400/30' : l.email_status === 'catch-all' ? 'text-yellow-400 border-yellow-400/30' : 'text-muted-foreground'}>
                               {l.email_status}
