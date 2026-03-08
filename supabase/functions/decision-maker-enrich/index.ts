@@ -28,10 +28,10 @@ async function searchDecisionMaker(
         messages: [
           {
             role: 'system',
-            content: `Você é um assistente que encontra decisores de empresas brasileiras. Responda SOMENTE com JSON válido no formato:
-{"name": "Nome Completo", "role": "Cargo", "confidence": 85, "linkedin_url": "https://linkedin.com/in/..."}
+            content: `Você é um assistente especializado em encontrar decisores de empresas brasileiras e seus dados de contato. Responda SOMENTE com JSON válido no formato:
+{"name": "Nome Completo", "role": "Cargo", "confidence": 85, "linkedin_url": "https://linkedin.com/in/...", "email": "nome@empresa.com.br", "phone": "+55 47 99999-9999"}
 
-Se não encontrar, responda: {"name": null, "role": null, "confidence": 0}
+Se não encontrar nenhuma informação, responda: {"name": null, "role": null, "confidence": 0}
 
 Regras de confidence:
 - 90-100: Nome e cargo confirmados em múltiplas fontes (site + LinkedIn)
@@ -39,7 +39,10 @@ Regras de confidence:
 - 50-69: Nome encontrado mas cargo inferido
 - 0-49: Informação vaga ou ausente
 
-linkedin_url é opcional - inclua somente se encontrar o perfil real.`,
+Campos opcionais (inclua somente se encontrar dados reais, não invente):
+- linkedin_url: URL completa do perfil LinkedIn da pessoa (não da empresa)
+- email: e-mail direto da pessoa ou e-mail corporativo da empresa
+- phone: telefone direto, celular ou WhatsApp da pessoa`,
           },
           { role: 'user', content: query },
         ],
