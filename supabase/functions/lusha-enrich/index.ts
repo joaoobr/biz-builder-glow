@@ -40,22 +40,21 @@ async function queryLusha(
   firstName?: string,
   lastName?: string,
 ): Promise<any | null> {
-  // If we have a person name, use person endpoint
-  // If not, try company endpoint for general contacts
-  const params = new URLSearchParams({ company: domain });
-  if (firstName) params.set('firstName', firstName);
-  if (lastName) params.set('lastName', lastName);
+  const endpoints: string[] = [];
 
-  // Try person endpoint first
-  const endpoints = [
-    `${LUSHA_API_URL}?${params.toString()}`,
-  ];
-
-  // If no name provided, also try the company prospecting endpoint
-  if (!firstName && !lastName) {
-    const companyParams = new URLSearchParams({ company: domain, limit: '1' });
-    endpoints.push(`https://api.lusha.com/v2/prospecting/contact?${companyParams.toString()}`);
+  // If we have firstName + lastName, use person endpoint with companyDomain
+  if (firstName && lastName) {
+    const params = new URLSearchParams({
+      firstName,
+      lastName,
+      companyDomain: domain,
+    });
+    endpoints.push(`${LUSHA_API_URL}?${params.toString()}`);
   }
+
+  // Always try company endpoint as fallback to find any contact
+  const companyParams = new URLSearchParams({ companyDomain: domain, limit: '1' });
+  endpoints.push(`https://api.lusha.com/v2/company?domain=${encodeURIComponent(domain)}`);
 
   for (const url of endpoints) {
     try {
@@ -78,20 +77,21 @@ async function queryLusha(
       }
 
       if (!res.ok) {
-        console.error(`[lusha-enrich] Lusha API error: ${res.status} ${await res.text().catch(() => '')}`);
-        continue; // try next endpoint
+        const body = await res.text().catch(() => '');
+        console.error(`[lusha-enrich] Lusha API error: ${res.status} ${body}`);
+        continue;
       }
 
       const data = await res.json();
       console.log(`[lusha-enrich] Response from ${url}: ${JSON.stringify(data).slice(0, 500)}`);
       
-      // For prospecting endpoint, extract first contact
-      if (url.includes('prospecting') && data?.data?.length > 0) {
-        return data.data[0];
-      }
-      
       if (data && (data.emailAddresses?.length || data.phoneNumbers?.length)) {
         return data;
+      }
+
+      // Company endpoint returns company-level data
+      if (url.includes('/v2/company') && data) {
+        return { _companyData: true, ...data };
       }
     } catch (err) {
       console.error(`[lusha-enrich] Lusha fetch error: ${err}`);
