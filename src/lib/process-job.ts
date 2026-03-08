@@ -352,6 +352,7 @@ export async function resumeJobApifyMaps(
   jobId: string,
   apifyRunId: string,
   quantity: number,
+  userId?: string,
 ) {
   try {
     await updateJob(jobId, {
