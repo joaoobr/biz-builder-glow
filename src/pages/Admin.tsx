@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Zap, ArrowLeft, Users, CreditCard, Search, Shield, Ban } from 'lucide-react';
+import { Zap, ArrowLeft, Users, CreditCard, Search, Shield, Ban, Database, Brain, Globe, DollarSign } from 'lucide-react';
 
 interface AuthUser {
   id: string;
