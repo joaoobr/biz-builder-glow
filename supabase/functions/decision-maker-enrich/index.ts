@@ -66,7 +66,7 @@ Campos opcionais (inclua somente se encontrar dados reais, não invente):
           messages: [
             {
               role: 'system',
-              content: `Responda SOMENTE com JSON: {"name": "Nome", "role": "Cargo", "confidence": 85, "linkedin_url": "url_ou_null"}. Se não encontrar: {"name": null, "role": null, "confidence": 0}`,
+              content: `Responda SOMENTE com JSON: {"name": "Nome", "role": "Cargo", "confidence": 85, "linkedin_url": "url_ou_null", "email": "email_ou_null", "phone": "telefone_ou_null"}. Se não encontrar: {"name": null, "role": null, "confidence": 0}`,
             },
             { role: 'user', content: query },
           ],
