@@ -298,30 +298,7 @@ const JobDetail = () => {
     }
   };
 
-  // Score + filter logic
-  const leadsWithScore = useMemo(() =>
-    leads.map(l => ({ ...l, _score: calcLeadScore(l) })),
-    [leads]
-  );
-
-  const categories = useMemo(() => {
-    const cats = new Set<string>();
-    leads.forEach(l => { if (l.category_name) cats.add(l.category_name); });
-    return Array.from(cats).sort();
-  }, [leads]);
-
-  const filtered = useMemo(() => {
-    return leadsWithScore.filter(l => {
-      if (search && !Object.values(l).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))) return false;
-      if (filters.minRating && (Number(l.rating) || 0) < Number(filters.minRating)) return false;
-      if (filters.hasPhone && !l.phone) return false;
-      if (filters.hasWebsite && !(l.website || l.website_url)) return false;
-      if (filters.hasEmail && !(l.corporate_email || (l as any).lusha_email)) return false;
-      if (filters.minScore && l._score < Number(filters.minScore)) return false;
-      if (filters.category && l.category_name !== filters.category) return false;
-      return true;
-    });
-  }, [leadsWithScore, search, filters]);
+  // (moved above early returns)
 
   const withSite = leads.filter(l => l.website_url || l.website).length;
   const withEmail = leads.filter(l => l.corporate_email || (l as any).lusha_email).length;
