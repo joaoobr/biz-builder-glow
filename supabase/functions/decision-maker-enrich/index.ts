@@ -6,7 +6,7 @@ const corsHeaders = {
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 const PAGES_TO_TRY = [
   '/sobre', '/equipe', '/quem-somos', '/contato', '/about', '/team', '/about-us',
@@ -75,27 +75,25 @@ Texto da página:
 ${pageText}`;
 
   try {
-    const res = await fetch(AI_GATEWAY_URL, {
+    const url = `${GEMINI_API_URL}?key=${apiKey}`;
+    const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 200,
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 200 },
       }),
     });
 
     if (!res.ok) {
-      console.error(`[decision-maker] AI error: ${res.status} ${await res.text()}`);
+      const errBody = await res.text();
+      console.error(`[decision-maker] Gemini API error: ${res.status} ${errBody}`);
       return null;
     }
 
     const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log(`[decision-maker] Gemini raw response: ${content}`);
     
     // Extract JSON from response
     const jsonMatch = content.match(/\{[\s\S]*?\}/);
@@ -135,22 +133,16 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('EXT_SUPABASE_URL') || Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('EXT_SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('EXT_SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY') || '';
+    const googleApiKey = Deno.env.get('GOOGLE_API_KEY') || '';
 
-    if (!lovableApiKey) {
-      console.error('[decision-maker] LOVABLE_API_KEY is not set!');
-      await supabase.from('jobs').update({
-        progress_message: 'Erro (Etapa 3): LOVABLE_API_KEY não configurada no Supabase.',
-      }).eq('id', jobId);
+    if (!googleApiKey) {
+      console.error('[decision-maker] GOOGLE_API_KEY is not set!');
       return new Response(
-        JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }),
+        JSON.stringify({ error: 'GOOGLE_API_KEY not configured. Set it in Supabase secrets.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
-
-    if (!lovableApiKey.startsWith('sk_')) {
-      console.error(`[decision-maker] LOVABLE_API_KEY has invalid format (length=${lovableApiKey.length}, prefix=${lovableApiKey.slice(0, 5)})`);
-    }
+    console.log(`[decision-maker] GOOGLE_API_KEY present, length=${googleApiKey.length}`);
 
     const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
@@ -207,7 +199,7 @@ Deno.serve(async (req) => {
     if (leadsErr) throw new Error(`Failed to fetch leads: ${leadsErr.message}`);
 
     console.log(`[decision-maker] jobId=${jobId} leadsToEnrich=${leads?.length ?? 0}`);
-    console.log(`[decision-maker] LOVABLE_API_KEY present: ${!!lovableApiKey}, length: ${lovableApiKey?.length ?? 0}`);
+    console.log(`[decision-maker] GOOGLE_API_KEY present: ${!!googleApiKey}, length: ${googleApiKey?.length ?? 0}`);
 
     await supabase.from('jobs').update({
       status: 'running',
@@ -247,7 +239,7 @@ Deno.serve(async (req) => {
           pagesFound++;
           console.log(`[decision-maker]   page found: ${page.url} (${page.text.length} chars)`);
 
-          const result = await extractDecisionMaker(page.text, lead.name, job.business_type || '', lovableApiKey);
+          const result = await extractDecisionMaker(page.text, lead.name, job.business_type || '', googleApiKey);
           console.log(`[decision-maker]   AI result for ${page.url}: ${JSON.stringify(result)}`);
           
           if (result && result.confidence > (bestResult?.confidence ?? 0)) {
