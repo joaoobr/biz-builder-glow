@@ -95,7 +95,9 @@ async function queryLusha(
         return {
           _companyData: true,
           companyName: companyData.name || companyData.companyName,
-          // Company endpoint doesn't return individual contacts
+          companyDescription: companyData.description || null,
+          companyEmployees: companyData.employees || null,
+          companyEmailDomain: companyData.emailDomain || null,
         };
       }
     } catch (err) {
@@ -309,6 +311,34 @@ Deno.serve(async (req) => {
                 decision_maker_role: title,
               } : {}),
               ...((linkedin && !lead.decision_maker_name) ? { linkedin_url: linkedin } : {}),
+            }).eq('id', lead.id);
+
+            updatedCount++;
+          } else if (result?._companyData) {
+            // Company-level data found — save what we have
+            const companyName = result.companyName || null;
+            const companyDesc = result.companyDescription || null;
+            const companyEmployees = result.companyEmployees || null;
+            const companyEmail = result.companyEmailDomain || null;
+
+            // Save to cache with company info
+            await supabase.from('lusha_cache').upsert({
+              query_key: cacheKey,
+              domain,
+              person_name: null,
+              email: companyEmail ? `contato@${companyEmail}` : null,
+              phone: null,
+              linkedin_url: null,
+              title: null,
+              company_name: companyName,
+              raw_response: result,
+            }, { onConflict: 'query_key' });
+
+            // Update lead with company-level info
+            await supabase.from('leads').update({
+              lusha_email: companyEmail ? `contato@${companyEmail}` : null,
+              lusha_title: companyEmployees ? `${companyEmployees} funcionários` : null,
+              lusha_source: 'lusha_company',
             }).eq('id', lead.id);
 
             updatedCount++;

@@ -17,7 +17,7 @@ const LeadsTable = ({ leads }: LeadsTableProps) => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-secondary/50">
-                {['Nome', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews', 'Decisor', 'Cargo', 'LinkedIn', 'E-mail', 'Status', 'Fonte'].map(h => (
+                {['Nome', 'Endereço', 'Telefone', 'Website', 'Rating', 'Reviews', 'Decisor', 'Cargo', 'LinkedIn', 'E-mail', 'Lusha Email', 'Lusha Telefone', 'Lusha LinkedIn', 'Lusha Cargo', 'Lusha Fonte', 'Status', 'Fonte'].map(h => (
                   <th key={h} className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -25,7 +25,7 @@ const LeadsTable = ({ leads }: LeadsTableProps) => {
             <tbody>
               {leads.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-12 text-center text-muted-foreground">
+                  <td colSpan={17} className="px-3 py-12 text-center text-muted-foreground">
                     Crie um job para ver resultados aqui.
                   </td>
                 </tr>
@@ -39,9 +39,14 @@ const LeadsTable = ({ leads }: LeadsTableProps) => {
                     <td className="px-3 py-2">{lead.rating || '—'}</td>
                     <td className="px-3 py-2">{lead.reviews_count || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{lead.decision_maker_name || '—'}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{lead.decision_maker_title || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{lead.decision_maker_title || lead.decision_maker_role || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{lead.linkedin_url || '—'}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{lead.email || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{lead.email || lead.corporate_email || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-primary">{lead.lusha_email || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-primary">{lead.lusha_phone || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-primary">{lead.lusha_linkedin || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-primary">{lead.lusha_title || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{lead.lusha_source || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{lead.email_status || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{lead.source || '—'}</td>
                   </tr>
