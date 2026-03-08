@@ -210,7 +210,22 @@ const AppHome = () => {
         </div>
 
         {/* New Job Form */}
-        <Card className={remaining <= 0 ? 'opacity-60 pointer-events-none' : ''}>
+        {remaining <= 0 ? (
+          <Card className="border-destructive/30">
+            <CardContent className="p-6 text-center space-y-3">
+              <div className="text-4xl">🚫</div>
+              <h3 className="text-lg font-semibold text-foreground">Créditos Esgotados</h3>
+              <p className="text-sm text-muted-foreground">
+                Você já utilizou todos os {credits?.credits_total ?? 5} créditos do seu plano <strong>{credits?.plan_name ?? 'Free'}</strong>.
+                <br />Faça upgrade para continuar gerando leads.
+              </p>
+              <Button asChild className="mt-2">
+                <Link to="/plans"><Crown className="h-4 w-4 mr-1.5" />Ver Planos de Upgrade</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2 text-base">
               <Plus className="h-4 w-4 text-primary" />
@@ -218,11 +233,6 @@ const AppHome = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {remaining <= 0 && (
-              <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                🚫 Seus créditos acabaram. Entre em contato para fazer upgrade do plano.
-              </div>
-            )}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
               <div className="space-y-1.5 lg:col-span-2">
                 <Label className="text-xs">Tipo de Negócio *</Label>
@@ -289,7 +299,8 @@ const AppHome = () => {
               </div>
             </div>
           </CardContent>
-        </Card>
+          </Card>
+        )}
 
         {/* Progress indicator */}
         {processing && progressMsg && (
