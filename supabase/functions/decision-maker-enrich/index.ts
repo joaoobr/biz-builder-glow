@@ -279,10 +279,9 @@ Deno.serve(async (req) => {
             updateData.corporate_email = result.email;
           }
 
-          // Save phone if found by Perplexity and lead has no phone yet
+          // Log phone found by Perplexity (Lusha step will handle phone enrichment)
           if (result.phone) {
-            // We'll update phone only if the lead doesn't have one from Google Maps
-            updateData.decision_maker_phone = result.phone;
+            console.log(`[decision-maker] Found phone for ${lead.name}: ${result.phone}`);
           }
 
           const { error: updateErr } = await supabase
