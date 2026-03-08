@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
     if (leadsErr) throw new Error(`Failed to fetch leads: ${leadsErr.message}`);
 
     console.log(`[decision-maker] jobId=${jobId} leadsToEnrich=${leads?.length ?? 0}`);
-    console.log(`[decision-maker] LOVABLE_API_KEY present: ${!!lovableApiKey}, length: ${lovableApiKey?.length ?? 0}`);
+    console.log(`[decision-maker] GOOGLE_API_KEY present: ${!!googleApiKey}, length: ${googleApiKey?.length ?? 0}`);
 
     await supabase.from('jobs').update({
       status: 'running',
